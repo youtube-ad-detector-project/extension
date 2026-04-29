@@ -1,0 +1,33 @@
+{
+  "name": "youtube-ad-detector",
+  "displayName": "YouTube Ad Detector",
+  "version": "0.0.1",
+  "description": "YouTube 영상의 자막을 자동 추출하는 Chrome 확장 (광고 탐지 사전 단계)",
+  "author": "limjaejoon",
+  "scripts": {
+    "dev": "plasmo dev",
+    "build": "plasmo build",
+    "package": "plasmo package",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "plasmo": "0.90.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.0.287",
+    "@types/node": "22.10.5",
+    "@types/react": "18.3.18",
+    "@types/react-dom": "18.3.5",
+    "typescript": "5.7.3"
+  },
+  "manifest": {
+    "host_permissions": [
+      "https://*.youtube.com/*"
+    ],
+    "permissions": [
+      "storage"
+    ]
+  }
+}
