@@ -24,7 +24,8 @@
   },
   "manifest": {
     "host_permissions": [
-      "https://*.youtube.com/*"
+      "https://*.youtube.com/*",
+      "http://localhost:3000/*"
     ],
     "permissions": [
       "storage"
