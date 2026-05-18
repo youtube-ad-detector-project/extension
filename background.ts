@@ -59,8 +59,26 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender, sendResponse)
     return false
   }
 
+  if (msg.type === "OPEN_REPORT") {
+    // 오버레이 링크 클릭 → 상세 위반 보고서 탭 열기 (콘텐츠 스크립트는 chrome.tabs 불가라 여기서 처리)
+    openReport(msg.videoId)
+    return false
+  }
+
   return false
 })
+
+// videoId(영상 식별자) → 확장 내부 보고서 탭 1개 생성 (반환 없음, side-effect 만).
+//   getURL: tabs/report.tsx 가 Plasmo 빌드 시 tabs/report.html 로 떨어지며, 확장 절대 URL 로 변환된다.
+//   ?v= 로 어떤 영상의 보고서인지 전달 — 보고서 페이지가 이 값으로 storage 자막을 다시 읽는다.
+function openReport(videoId: string): void {
+  const url = chrome.runtime.getURL(
+    `tabs/report.html?v=${encodeURIComponent(videoId)}`
+  )
+  console.log(TAG, `📄 보고서 탭 열기: 영상=${videoId}, url=${url}`)
+  // chrome.tabs.create 는 "tabs" 권한 없이도 동작 (탭 URL 조회가 아니라 생성이라서)
+  void chrome.tabs.create({ url })
+}
 
 // 사람이 읽기 쉬운 라벨로 출처/종류를 매핑 (Plan E 추가로 분기가 늘어 객체로 정리)
 const SOURCE_LABEL: Record<CaptionsPayload["source"], string> = {

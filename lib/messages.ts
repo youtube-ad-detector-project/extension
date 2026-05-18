@@ -43,7 +43,18 @@ export type FallbackRequestMessage = {
   videoId: string
 }
 
-export type RuntimeMessage = CaptionsResultMessage | FallbackRequestMessage
+// 오버레이가 "상세 위반 보고서 탭을 열어달라"고 background 에 요청하는 메시지
+//   왜 background 경유: 콘텐츠 스크립트엔 chrome.tabs 가 없고, 확장 탭 페이지를
+//   web_accessible_resources 없이 여는 건 background 의 chrome.tabs.create 만 가능하기 때문
+export type OpenReportMessage = {
+  type: "OPEN_REPORT"
+  videoId: string
+}
+
+export type RuntimeMessage =
+  | CaptionsResultMessage
+  | FallbackRequestMessage
+  | OpenReportMessage
 
 // MAIN world ↔ ISOLATED bridge 가 window.postMessage 로 통신할 때 식별용 태그
 export const POSTMSG_TAG = "__yt_cap_ext__"

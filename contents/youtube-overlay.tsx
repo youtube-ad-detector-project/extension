@@ -16,12 +16,13 @@ import {
   type ScannedLine
 } from "~lib/adScan"
 import { getVideoIdFromUrl } from "~lib/captions"
-import type { FinalStatus } from "~lib/matchingEngine"
 import type {
   CaptionsError,
   CaptionsPayload,
-  CaptionsPending
+  CaptionsPending,
+  OpenReportMessage
 } from "~lib/messages"
+import { formatTime, STATUS_VIEW } from "~lib/scanView"
 import { getStoredCaption } from "~lib/storage"
 
 // YouTube 전 페이지에 주입 — SPA 네비게이션(홈→영상)도 한 번의 주입으로 커버됨
@@ -72,12 +73,8 @@ const SOURCE_LABEL: Record<CaptionsPayload["source"], string> = {
   "stt-fallback": "Plan E (STT)"
 }
 
-// 룰 엔진 상태 → 화면 표현(색·태그). 정상은 색 강조 없이 기본 텍스트
-const STATUS_VIEW: Record<FinalStatus, { color: string; tag: string }> = {
-  "Rule-Positive": { color: "#e5484d", tag: "위반" },
-  "Route-to-Model": { color: "#f5a623", tag: "의심" },
-  "Rule-Negative": { color: "#ddd", tag: "" }
-}
+// STATUS_VIEW(상태→색·태그)·formatTime 은 보고서 탭(tabs/report.tsx)과 같은 표기를
+//   써야 해 ~lib/scanView 로 옮겨 공유한다 (위 import 참고)
 
 // 콘텐츠 스크립트(오버레이)에서 실행 → YouTube 페이지 F12 콘솔에 찍힘 (adScan 과 같은 창)
 const TAG = "[yt-cap:overlay]"
@@ -166,8 +163,18 @@ function Overlay() {
   // 두 패널을 형제로 렌더 — 각자 open 상태를 따로 들고, 위치 슬롯이 달라 동시에 떠도 안 겹침
   return (
     <>
-      <SubtitlePanel entry={entry} scanned={scanned} summary={summary} />
-      <ViolationPanel scanned={scanned} summary={summary} />
+      {/* videoId 는 위 `if (!videoId) return null` 가드를 지나 string 으로 좁혀짐 → 두 패널의 보고서 URL 키 */}
+      <SubtitlePanel
+        entry={entry}
+        scanned={scanned}
+        summary={summary}
+        videoId={videoId}
+      />
+      <ViolationPanel
+        scanned={scanned}
+        summary={summary}
+        videoId={videoId}
+      />
     </>
   )
 }
@@ -181,16 +188,48 @@ function statusDot(summary: ScanSummary | null): string {
   return "#1f7a34"
 }
 
+// 보고서 진입 링크 — 두 패널(CC·⚠)이 똑같이 쓰는 진입점이라 컴포넌트로 묶어 한 곳만 고치게.
+//   무엇이 들어가 → 처리 → 무엇이 반환: videoId+summary → (위반·의심 있으면) 링크 버튼 / 없으면 null
+function ReportLink({
+  videoId,
+  summary
+}: {
+  videoId: string
+  summary: ScanSummary | null
+}) {
+  // 위반·의심이 하나도 없으면 "펼칠 근거"가 없으므로 링크 자체를 렌더하지 않음
+  if (!summary || (summary.positive === 0 && summary.route === 0)) return null
+
+  // 클릭 → background 에 보고서 탭 열기 위임.
+  //   왜 직접 안 열까: 콘텐츠 스크립트엔 chrome.tabs 가 없고, web_accessible_resources
+  //   없이 확장 페이지를 여는 건 background 의 chrome.tabs.create 만 가능하기 때문.
+  const openReport = () => {
+    const msg: OpenReportMessage = { type: "OPEN_REPORT", videoId }
+    void chrome.runtime.sendMessage(msg)
+  }
+
+  return (
+    <button
+      onClick={openReport}
+      style={styles.reportLink}
+      title="새 탭에서 상세 근거 보고서 열기">
+      📄 상세 위반 보고서 열기 ↗
+    </button>
+  )
+}
+
 // ── 자막 패널: 전체 자막 줄을 상태색으로 렌더 (기존 동작 그대로, 위치도 right:12 유지) ──
 //   props 로 부모가 계산한 entry/scanned/summary 를 받는다 (자체 storage 구독 없음)
 function SubtitlePanel({
   entry,
   scanned,
-  summary
+  summary,
+  videoId
 }: {
   entry: StoredEntry | null
   scanned: ScannedLine[] | null
   summary: ScanSummary | null
+  videoId: string // 위반이 하이라이트돼 보이는 패널이라, 여기서도 보고서로 바로 갈 수 있게
 }) {
   // 토글 열림 여부 — 닫힌 상태가 기본 (영상 가리지 않게)
   const [open, setOpen] = useState(false)
@@ -225,6 +264,8 @@ function SubtitlePanel({
           ×
         </button>
       </div>
+      {/* 위반·의심이 있으면 헤더 아래에 보고서 진입 링크 (없으면 ReportLink 가 null) */}
+      <ReportLink videoId={videoId} summary={summary} />
       <div style={styles.panelBody}>{renderBody(entry, scanned)}</div>
     </div>
   )
@@ -235,10 +276,12 @@ function SubtitlePanel({
 //   왜 별도 패널: 자막 전체에서 문제 줄만 빠르게 훑을 수 있게, 자막 패널과 독립적으로 켜고 끔
 function ViolationPanel({
   scanned,
-  summary
+  summary,
+  videoId
 }: {
   scanned: ScannedLine[] | null
   summary: ScanSummary | null
+  videoId: string // 보고서 탭 URL(?v=) 키 — 어떤 영상의 근거를 펼칠지 식별
 }) {
   // 자막 패널과 별개의 open 상태 — 둘을 동시에 띄울 수 있어야 하므로 독립적으로 관리
   const [open, setOpen] = useState(false)
@@ -273,6 +316,8 @@ function ViolationPanel({
           ×
         </button>
       </div>
+      {/* CC 패널과 동일한 진입점을 공유 (위반·의심 없으면 ReportLink 가 null) */}
+      <ReportLink videoId={videoId} summary={summary} />
       <div style={styles.panelBody}>{renderViolationBody(scanned)}</div>
     </div>
   )
@@ -383,13 +428,6 @@ function renderViolationBody(scanned: ScannedLine[] | null) {
   )
 }
 
-// 초(float) → mm:ss — Whisper 가 초 단위 float 으로 timestamp 를 줌
-function formatTime(sec: number): string {
-  const m = Math.floor(sec / 60)
-  const s = Math.floor(sec % 60)
-  return `${m}:${s.toString().padStart(2, "0")}`
-}
-
 // 인라인 스타일 모음 — Plasmo CSUI 가 shadow DOM 으로 격리하지만 명시적으로 적어둠
 //   position: fixed 로 viewport 우상단에 고정 — body 에 붙어있어 어떤 페이지/모드에서도 보장됨
 //   top: 72px 는 YouTube masthead(상단바) 아래에 떨어지게 한 값
@@ -457,6 +495,21 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1,
     width: 20,
     height: 20
+  },
+  reportLink: {
+    // 헤더와 본문 사이 가로 막대형 링크 — 패널 폭을 꽉 채워 눈에 띄게
+    display: "block",
+    width: "100%",
+    textAlign: "left",
+    background: "rgba(229,72,77,0.15)",
+    color: "#ff8a8d",
+    border: "none",
+    borderBottom: "1px solid rgba(255,255,255,0.1)",
+    padding: "8px 10px",
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "inherit"
   },
   panelBody: {
     overflowY: "auto",
