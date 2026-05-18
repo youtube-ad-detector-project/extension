@@ -1,12 +1,22 @@
-// 유튜브 영상 우측 상단에 떠있는 토글형 자막 오버레이.
+// 유튜브 영상 우측 상단에 떠있는 토글형 오버레이 2종.
 //   호출 흐름: Plasmo 가 watch/shorts 페이지에 자동 주입 → getRootContainer 가 #movie_player 찾기
-//                → React 마운트 → useEffect 로 URL 폴링/storage 구독 → 상태별 토글 색
-//   닫힌 상태: 작은 원형 토글 (회색=대기/진행/실패, 초록=성공)
-//   열린 상태: 헤더 + segments 리스트 (시간 + 텍스트 한 줄씩)
+//                → React 마운트 → 부모 Overlay 가 URL 폴링/storage 구독으로 자막 1회 스캔
+//                → 자식 패널 둘(자막 / 위반)이 같은 스캔 결과를 나눠 렌더
+//   왜 부모-자식 구조: storage 구독·룰 스캔을 패널마다 따로 돌리면 두 번 계산되므로,
+//                      부모에서 한 번만 계산해 props 로 내려준다 (두 토글은 각자 open 상태만 가짐)
+//   닫힌 상태: 작은 원형 토글 (회색=대기/진행/실패, 색=결과)
+//   열린 상태: 헤더 + 리스트 — 자막 패널은 전체 줄, 위반 패널은 위반·의심 줄만
 
 import type { PlasmoCSConfig, PlasmoGetRootContainer } from "plasmo"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import {
+  scanCaptions,
+  summarize,
+  type ScanSummary,
+  type ScannedLine
+} from "~lib/adScan"
 import { getVideoIdFromUrl } from "~lib/captions"
+import type { FinalStatus } from "~lib/matchingEngine"
 import type {
   CaptionsError,
   CaptionsPayload,
@@ -45,6 +55,11 @@ type StoredEntry =
 
 const KEY_PREFIX = "caption:"
 
+// 두 패널이 겹치지 않도록 가로 슬롯을 분리 — 자막 패널은 right:12, 위반 패널은 그 왼쪽
+//   자막 패널 최대 폭(12 + 340)을 넘어선 지점에 둬야 자막이 열려 있어도 위반 토글이 안 가려진다
+const SLOT_SUBTITLE_RIGHT = 12
+const SLOT_VIOLATION_RIGHT = 364
+
 // 상태별 짧은 한국어 라벨 — 헤더와 toggle title (hover) 에서 공통 사용
 const STAGE_LABEL: Record<CaptionsPending["stage"], string> = {
   queued: "대기 중",
@@ -57,9 +72,20 @@ const SOURCE_LABEL: Record<CaptionsPayload["source"], string> = {
   "stt-fallback": "Plan E (STT)"
 }
 
+// 룰 엔진 상태 → 화면 표현(색·태그). 정상은 색 강조 없이 기본 텍스트
+const STATUS_VIEW: Record<FinalStatus, { color: string; tag: string }> = {
+  "Rule-Positive": { color: "#e5484d", tag: "위반" },
+  "Route-to-Model": { color: "#f5a623", tag: "의심" },
+  "Rule-Negative": { color: "#ddd", tag: "" }
+}
+
+// 콘텐츠 스크립트(오버레이)에서 실행 → YouTube 페이지 F12 콘솔에 찍힘 (adScan 과 같은 창)
+const TAG = "[yt-cap:overlay]"
+console.log(TAG, "📌 자막 오버레이 로드됨 (URL 폴링 + storage 구독 + 룰 스캔 렌더)")
+
+// 부모 컴포넌트 — 공유 상태(영상ID·storage entry·스캔 결과)를 한 번만 계산해 두 패널에 내려준다.
+//   Plasmo 가 이 default export 를 mount 하므로, 여기가 전체 트리의 루트.
 function Overlay() {
-  // 토글 열림 여부 — 닫힌 상태가 기본 (영상 가리지 않게)
-  const [open, setOpen] = useState(false)
   // 현재 영상 ID — URL 폴링으로 SPA 네비게이션 추적
   const [videoId, setVideoId] = useState<string | null>(() =>
     getVideoIdFromUrl(window.location.href)
@@ -74,7 +100,10 @@ function Overlay() {
     const id = setInterval(() => {
       if (window.location.href !== last) {
         last = window.location.href
-        setVideoId(getVideoIdFromUrl(last))
+        const next = getVideoIdFromUrl(last)
+        // SPA 전환 추적 — 어떤 영상으로 바뀌었는지(또는 영상 아닌 페이지인지) 가시화
+        console.log(TAG, `🔁 영상 전환 감지 - 새 영상ID=${next ?? "(영상 아님)"}`)
+        setVideoId(next)
       }
     }, 1000)
     return () => clearInterval(id)
@@ -87,9 +116,14 @@ function Overlay() {
       setEntry(null)
       return
     }
-    void getStoredCaption(videoId).then(
-      (e) => setEntry(e as StoredEntry | null)
-    )
+    void getStoredCaption(videoId).then((e) => {
+      // 첫 조회 — 자막 기록이 이미 있는지/어떤 상태(성공·대기·실패)인지 확인용
+      console.log(
+        TAG,
+        `📨 storage 첫 조회: 영상=${videoId}, 상태=${e ? (e as StoredEntry).ok : "기록없음"}`
+      )
+      setEntry(e as StoredEntry | null)
+    })
 
     const key = KEY_PREFIX + videoId
     const onChanged = (
@@ -98,63 +132,174 @@ function Overlay() {
     ) => {
       // 다른 영상의 변경은 무시 — 동시에 여러 탭이 추출 중일 수 있음
       if (area === "local" && changes[key]) {
-        setEntry((changes[key].newValue ?? null) as StoredEntry | null)
+        const next = (changes[key].newValue ?? null) as StoredEntry | null
+        // Plan E pending→done 같은 전이가 보이도록 변경 시점마다 상태를 찍는다
+        console.log(
+          TAG,
+          `💾 storage 변경 반영: 영상=${videoId}, 상태=${next ? next.ok : "삭제됨"}`
+        )
+        setEntry(next)
       }
     }
     chrome.storage.onChanged.addListener(onChanged)
     return () => chrome.storage.onChanged.removeListener(onChanged)
   }, [videoId])
 
+  // 자막이 성공 저장된 경우에만 룰 엔진을 돌린다.
+  //   useMemo: 토글 열고닫기 같은 리렌더마다 자막 전체를 재스캔하지 않도록 entry 기준 캐시
+  const scanned = useMemo<ScannedLine[] | null>(() => {
+    // 성공 자막일 때만 스캔 트리거. 그 외(없음/대기/실패)는 스캔 자체를 건너뜀
+    if (entry?.ok !== true) {
+      if (entry)
+        console.log(TAG, `🟡 스캔 스킵 - entry 상태=${entry.ok} (성공 자막 아님)`)
+      return null
+    }
+    console.log(TAG, "🟢 성공 자막 감지 - 룰 스캔 호출 (adScan.scanCaptions)")
+    return scanCaptions(entry.data.segments)
+  }, [entry])
+  const summary: ScanSummary | null = scanned ? summarize(scanned) : null
+
   // 영상 페이지가 아니거나 player 가 없으면 오버레이를 안 그림 (홈/채널로 SPA 이동했을 때)
+  //   주의: useMemo 호출 뒤에 둬야 훅 순서가 안정적 (early return 이 훅보다 앞서면 안 됨)
   if (!videoId) return null
 
-  // 토글 색 — 사용자 명세: 추출 성공만 초록, 그 외(대기/진행/실패)는 회색
-  const isSuccess = entry?.ok === true
-  const dotColor = isSuccess ? "#1f7a34" : "#888"
+  // 두 패널을 형제로 렌더 — 각자 open 상태를 따로 들고, 위치 슬롯이 달라 동시에 떠도 안 겹침
+  return (
+    <>
+      <SubtitlePanel entry={entry} scanned={scanned} summary={summary} />
+      <ViolationPanel scanned={scanned} summary={summary} />
+    </>
+  )
+}
 
-  // ── 닫힌 상태: 작은 동그란 토글 버튼 ──────────────────────────────
+// summary → 토글/헤더 점 색. 위반(빨강) > 의심(주황) > 정상(초록), 스캔 전이면 회색
+//   두 패널이 같은 규칙을 쓰므로 헬퍼로 분리 (중복 제거)
+function statusDot(summary: ScanSummary | null): string {
+  if (!summary) return "#888"
+  if (summary.positive > 0) return "#e5484d"
+  if (summary.route > 0) return "#f5a623"
+  return "#1f7a34"
+}
+
+// ── 자막 패널: 전체 자막 줄을 상태색으로 렌더 (기존 동작 그대로, 위치도 right:12 유지) ──
+//   props 로 부모가 계산한 entry/scanned/summary 를 받는다 (자체 storage 구독 없음)
+function SubtitlePanel({
+  entry,
+  scanned,
+  summary
+}: {
+  entry: StoredEntry | null
+  scanned: ScannedLine[] | null
+  summary: ScanSummary | null
+}) {
+  // 토글 열림 여부 — 닫힌 상태가 기본 (영상 가리지 않게)
+  const [open, setOpen] = useState(false)
+  const dotColor = statusDot(summary)
+
+  // 닫힌 상태: 작은 동그란 토글 버튼
   if (!open) {
     return (
       <button
         onClick={() => setOpen(true)}
-        style={{ ...styles.toggleClosed, background: dotColor }}
-        title={describeState(entry)}
-      >
+        style={{
+          ...styles.toggleClosed,
+          right: SLOT_SUBTITLE_RIGHT,
+          background: dotColor
+        }}
+        title={describeState(entry, summary)}>
         CC
       </button>
     )
   }
 
-  // ── 열린 상태: 헤더 + segments 리스트 ─────────────────────────────
+  // 열린 상태: 헤더 + 전체 segments 리스트
   return (
-    <div style={styles.panel}>
+    <div style={{ ...styles.panel, right: SLOT_SUBTITLE_RIGHT }}>
       <div style={styles.panelHeader}>
         <span style={{ ...styles.dot, background: dotColor }} />
-        <span style={styles.headerLabel}>{describeState(entry)}</span>
+        <span style={styles.headerLabel}>{describeState(entry, summary)}</span>
         <button
           onClick={() => setOpen(false)}
           style={styles.closeBtn}
-          title="닫기"
-        >
+          title="닫기">
           ×
         </button>
       </div>
-      <div style={styles.panelBody}>{renderBody(entry)}</div>
+      <div style={styles.panelBody}>{renderBody(entry, scanned)}</div>
     </div>
   )
 }
 
-// 한 줄 상태 요약 — 토글 hover tooltip 과 패널 헤더에서 공유
-function describeState(entry: StoredEntry | null): string {
+// ── 위반 패널: 위반·의심 줄만 모아 보여주는 독립 토글 (자막 패널 왼쪽 슬롯) ──
+//   entry 는 안 받는다 — 이 패널은 "분석 결과"만 다루므로 scanned/summary 면 충분
+//   왜 별도 패널: 자막 전체에서 문제 줄만 빠르게 훑을 수 있게, 자막 패널과 독립적으로 켜고 끔
+function ViolationPanel({
+  scanned,
+  summary
+}: {
+  scanned: ScannedLine[] | null
+  summary: ScanSummary | null
+}) {
+  // 자막 패널과 별개의 open 상태 — 둘을 동시에 띄울 수 있어야 하므로 독립적으로 관리
+  const [open, setOpen] = useState(false)
+  const dotColor = statusDot(summary)
+
+  // 닫힌 상태: ⚠ 토글 (자막 토글과 색 규칙은 같고 위치 슬롯만 다름)
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        style={{
+          ...styles.toggleClosed,
+          right: SLOT_VIOLATION_RIGHT,
+          background: dotColor
+        }}
+        title={describeViolation(summary)}>
+        ⚠
+      </button>
+    )
+  }
+
+  // 열린 상태: 헤더(위반/의심 개수) + 위반·의심 줄만 필터링한 리스트
+  return (
+    <div style={{ ...styles.panel, right: SLOT_VIOLATION_RIGHT }}>
+      <div style={styles.panelHeader}>
+        <span style={{ ...styles.dot, background: dotColor }} />
+        <span style={styles.headerLabel}>{describeViolation(summary)}</span>
+        <button
+          onClick={() => setOpen(false)}
+          style={styles.closeBtn}
+          title="닫기">
+          ×
+        </button>
+      </div>
+      <div style={styles.panelBody}>{renderViolationBody(scanned)}</div>
+    </div>
+  )
+}
+
+// 한 줄 상태 요약 — 자막 토글 hover tooltip 과 자막 패널 헤더에서 공유
+function describeState(
+  entry: StoredEntry | null,
+  summary: ScanSummary | null
+): string {
   if (!entry) return "자막 추출 대기 중..."
   if (entry.ok === "pending") return STAGE_LABEL[entry.data.stage]
   if (entry.ok === false) return `실패: ${entry.data.reason}`
-  // 성공: "8라인 · 한국어 · Plan E (STT)"
-  return `${entry.data.segments.length}라인 · ${entry.data.lang} · ${SOURCE_LABEL[entry.data.source]}`
+  // 성공: 룰 엔진 요약 — 위반/의심/정상 개수 (요약 없으면 추출 라인 수만)
+  if (summary)
+    return `위반 ${summary.positive} · 의심 ${summary.route} · 정상 ${summary.negative}`
+  return `${entry.data.segments.length}라인 추출됨`
 }
 
-// 패널 본문 — 상태별로 다른 내용
-function renderBody(entry: StoredEntry | null) {
+// 위반 패널 헤더/툴팁 문구 — scanned 가 없으면 분석 전, 있으면 위반·의심 개수만 강조
+function describeViolation(summary: ScanSummary | null): string {
+  if (!summary) return "자막 분석 대기 중..."
+  return `위반 ${summary.positive} · 의심 ${summary.route}`
+}
+
+// 자막 패널 본문 — 상태별로 다른 내용
+function renderBody(entry: StoredEntry | null, scanned: ScannedLine[] | null) {
   if (!entry) {
     return (
       <p style={styles.muted}>
@@ -180,15 +325,60 @@ function renderBody(entry: StoredEntry | null) {
       </p>
     )
   }
-  // 성공 — Whisper segments 그대로 시간 + 텍스트 형태로 한 줄씩
+  // 성공 — 자막 줄마다 룰 엔진 상태를 색으로 표시 (위반=빨강, 의심=주황, 정상=기본)
+  //   scanned 는 entry.ok===true 일 때만 채워지므로 여기선 항상 배열이지만, 타입상 null 가드
+  const lines = scanned ?? []
   return (
     <div>
-      {entry.data.segments.map((s, i) => (
-        <div key={i} style={styles.segmentRow}>
-          <span style={styles.timestamp}>{formatTime(s.start)}</span>
-          <span style={styles.text}>{s.text}</span>
-        </div>
-      ))}
+      {lines.map((l, i) => {
+        // 상태→색·태그 매핑. 정상이 아닌 줄만 [위반]/[의심] 접두 태그를 붙인다
+        const view = STATUS_VIEW[l.status]
+        const flagged = l.status !== "Rule-Negative"
+        return (
+          <div key={i} style={styles.segmentRow}>
+            <span style={styles.timestamp}>{formatTime(l.start)}</span>
+            <span style={{ ...styles.text, color: view.color }}>
+              {flagged ? `[${view.tag}] ` : ""}
+              {l.text}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// 위반 패널 본문 — 위반·의심 줄만 추려 (텍스트 + 태그만, 매칭 근거는 표시 안 함)
+//   데이터 형태: ScannedLine[] → status 가 Rule-Negative 가 아닌 줄만 남긴 부분집합
+function renderViolationBody(scanned: ScannedLine[] | null) {
+  // 아직 성공 자막이 아니어서 스캔 결과가 없는 경우 — 자막 패널 쪽에서 진행 상태 확인 유도
+  if (!scanned) {
+    return (
+      <p style={styles.muted}>
+        분석할 자막이 아직 없습니다. (자막 추출/전사 완료 후 표시됩니다)
+      </p>
+    )
+  }
+  // 정상이 아닌 줄만 필터 — 위반 패널의 핵심 변환 지점
+  const flagged = scanned.filter((l) => l.status !== "Rule-Negative")
+  // 스캔은 끝났는데 걸린 줄이 0개면 "깨끗함"을 명시 (빈 화면이 버그처럼 보이지 않게)
+  if (flagged.length === 0) {
+    return <p style={styles.muted}>위반·의심 신호가 발견되지 않았습니다 ✅</p>
+  }
+  return (
+    <div>
+      {flagged.map((l, i) => {
+        const view = STATUS_VIEW[l.status]
+        return (
+          <div key={i} style={styles.segmentRow}>
+            <span style={styles.timestamp}>{formatTime(l.start)}</span>
+            <span style={{ ...styles.text, color: view.color }}>
+              {`[${view.tag}] `}
+              {l.text}
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -203,6 +393,7 @@ function formatTime(sec: number): string {
 // 인라인 스타일 모음 — Plasmo CSUI 가 shadow DOM 으로 격리하지만 명시적으로 적어둠
 //   position: fixed 로 viewport 우상단에 고정 — body 에 붙어있어 어떤 페이지/모드에서도 보장됨
 //   top: 72px 는 YouTube masthead(상단바) 아래에 떨어지게 한 값
+//   right 는 패널별로 SLOT_* 상수를 인라인 override (자막=12, 위반=364) 해 동시에 떠도 안 겹침
 const styles: Record<string, React.CSSProperties> = {
   toggleClosed: {
     position: "fixed",
