@@ -348,5 +348,7 @@ function analyzeSentence(
   };
 }
 
-export { analyzeSentence, isRegisteredHealthFood };
-export type { AnalysisResult, RuleHit, TriggerHit, ExceptionHit, FinalStatus };
+// 외부 소비자는 adScan(analyzeSentence) 과 그 결과 타입(AnalysisResult/FinalStatus) 뿐.
+//   isRegisteredHealthFood·RuleHit·TriggerHit·ExceptionHit 는 이 파일 안에서만 쓰여 export 하지 않는다.
+export { analyzeSentence };
+export type { AnalysisResult, FinalStatus };

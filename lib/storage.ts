@@ -46,22 +46,11 @@ export async function saveCaptionPending(
   await chrome.storage.local.set({ [KEY_PREFIX + videoId]: entry })
 }
 
-// 단일 영상의 저장된 결과 조회 (없으면 null)
+// 단일 영상의 저장된 결과 조회 (없으면 null) — overlay/report 가 storage 를 읽을 때 쓴다
 export async function getStoredCaption(
   videoId: string
 ): Promise<StoredEntry | null> {
   const key = KEY_PREFIX + videoId
   const obj = await chrome.storage.local.get(key)
   return (obj[key] as StoredEntry) ?? null
-}
-
-// 24h 이내에 성공적으로 저장된 자막이 있는지 — 같은 영상 중복 fetch 회피용
-//   ok:"pending" 은 "STT 가 진행 중" 이라 아직 자막이 없는 상태이므로 fresh 가 아님 → false
-export async function hasFreshCaption(
-  videoId: string,
-  maxAgeMs: number = 24 * 60 * 60 * 1000
-): Promise<boolean> {
-  const entry = await getStoredCaption(videoId)
-  if (!entry || entry.ok !== true) return false
-  return Date.now() - entry.savedAt < maxAgeMs
 }

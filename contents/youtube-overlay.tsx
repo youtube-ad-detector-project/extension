@@ -67,11 +67,6 @@ const STAGE_LABEL: Record<CaptionsPending["stage"], string> = {
   downloading: "다운로드 중 (yt-dlp)",
   transcribing: "전사 중 (Whisper)"
 }
-const SOURCE_LABEL: Record<CaptionsPayload["source"], string> = {
-  "main-world": "Plan A",
-  "background-fallback": "Plan B",
-  "stt-fallback": "Plan E (STT)"
-}
 
 // STATUS_VIEW(상태→색·태그)·formatTime 은 보고서 탭(tabs/report.tsx)과 같은 표기를
 //   써야 해 ~lib/scanView 로 옮겨 공유한다 (위 import 참고)
@@ -91,7 +86,7 @@ function Overlay() {
   const [entry, setEntry] = useState<StoredEntry | null>(null)
 
   // YouTube 는 SPA 라 페이지 전환 시 content script 가 재주입되지 않음 → URL 폴링으로 영상 변경 감지
-  //   youtube-main.ts 도 같은 1초 폴링 패턴을 쓴다
+  //   youtube-shorts.ts(STT 트리거)도 같은 1초 폴링 패턴을 쓴다
   useEffect(() => {
     let last = window.location.href
     const id = setInterval(() => {
