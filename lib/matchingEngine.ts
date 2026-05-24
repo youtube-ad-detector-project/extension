@@ -9,6 +9,7 @@
  *
  * 흐름:
  *   자막 문장 입력
+ *     → (NEW) 문장 내 건기식 제품명 자동 탐색
  *     → 키워드 룰 매칭 (keyword_dict.json)
  *     → 예외처리 적용 (해당 룰 가중치 해제)
  *     → 최종 룰 가중치 합 ≥ 8점? → 위반 확정 (Rule-Positive)
@@ -91,29 +92,50 @@ interface CompiledTrigger {
 }
 
 // ────────────────────────────────────────
-// 초기화: 건기식 제품명 set
+// 초기화: 건기식 제품명 자동 탐색을 위한 전처리
 // ────────────────────────────────────────
 
+// ⭐️ 꺾쇠(< >) 제거 완료
 const HEALTH_FOOD_VERIFY_URL =
   'https://www.foodsafetykorea.go.kr/portal/healthyfoodlife/searchHomeHF.do';
 
+function normalizeHealthFoodText(value: string): string {
+  return value.replace(/[^a-zA-Z0-9가-힣]/g, '').toLowerCase();
+}
+
+// 자동 탐색용 배열: 짧은 단어 오작동 방지(길이 4 이상) & 긴 이름부터 매칭(길이 역순 정렬)
+const normalizedHealthFoods = (healthFoodsList as string[])
+  .map((name) => ({
+    original: name,
+    normalized: normalizeHealthFoodText(name),
+  }))
+  .filter((item) => item.normalized.length >= 4)
+  .sort((a, b) => b.normalized.length - a.normalized.length);
+
 const healthFoodSet = new Set(
-  (healthFoodsList as string[]).map(
-    name => name.replace(/[^a-zA-Z0-9가-힣]/g, '').toLowerCase()
-  )
+  (healthFoodsList as string[]).map((name) => normalizeHealthFoodText(name))
 );
 
 function isRegisteredHealthFood(productName: string): boolean {
   if (!productName) return false;
-  return healthFoodSet.has(
-    productName.replace(/[^a-zA-Z0-9가-힣]/g, '').toLowerCase()
+  return healthFoodSet.has(normalizeHealthFoodText(productName));
+}
+
+// 자막 문장에서 건기식 제품명이 포함되어 있는지 검사하는 함수
+function findRegisteredHealthFoodInSentence(sentence: string): string {
+  const normalizedSentence = normalizeHealthFoodText(sentence);
+  if (!normalizedSentence) return '';
+
+  const matched = normalizedHealthFoods.find((item) =>
+    normalizedSentence.includes(item.normalized)
   );
+
+  return matched?.original ?? '';
 }
 
 // ────────────────────────────────────────
-// 초기화: 룰·예외 정규식 컴파일
+// 초기화: 룰·예외·트리거 정규식 컴파일
 // ────────────────────────────────────────
-// 왜 모듈 로드 시 1회: 자막 줄마다 new RegExp 재컴파일하면 비싸므로 미리 RegExp 객체로 변환해둔다
 
 const compiledRules: CompiledRule[] = [];
 const compiledExceptions: CompiledRule[] = [];
@@ -130,24 +152,19 @@ for (const rule of (keywordDict as any).rules) {
   }
 }
 
-// ────────────────────────────────────────
-// 초기화: 트리거 정규식 컴파일
-// ────────────────────────────────────────
+const compiledTriggers: CompiledTrigger[] = (
+  triggerDict as any
+).categories.flatMap((cat: any) =>
+  cat.strengths.map((s: any) => ({
+    categoryId: cat.id,
+    categoryName: cat.name,
+    level: s.level,
+    pattern: new RegExp(s.regex),
+    weight: (triggerDict as any).weight_by_strength[s.level],
+  }))
+);
 
-const compiledTriggers: CompiledTrigger[] =
-  (triggerDict as any).categories.flatMap((cat: any) =>
-    cat.strengths.map((s: any) => ({
-      categoryId: cat.id,
-      categoryName: cat.name,
-      level: s.level,
-      pattern: new RegExp(s.regex),
-      weight: (triggerDict as any).weight_by_strength[s.level],
-    }))
-  );
-
-// 사전 로드/정규식 컴파일 결과 1회 확인 — 이 로그가 안 찍히면 위 for/flatMap 의
-//   new RegExp() 에서 깨진 정규식으로 throw 된 것(런타임 RegExp 에러). 디버깅 첫 지점.
-const ENGINE_TAG = "[yt-cap:engine]";
+const ENGINE_TAG = '[yt-cap:engine]';
 console.log(
   ENGINE_TAG,
   `📌 룰 엔진 로드됨 - 룰 ${compiledRules.length} / 예외 ${compiledExceptions.length} / 트리거 ${compiledTriggers.length} (정규식 컴파일 성공)`
@@ -156,14 +173,11 @@ console.log(
 // ────────────────────────────────────────
 // 메인 분석 함수
 // ────────────────────────────────────────
-// 무엇이 들어가 → 처리 → 무엇이 반환되는지:
-//   sentence(자막 한 줄), productName(없으면 '') → 룰/예외/트리거 채점 → AnalysisResult(finalStatus 포함)
 
 function analyzeSentence(
   sentence: string,
   productName: string = ''
 ): AnalysisResult {
-
   // 빈 문장 가드
   if (!sentence || !sentence.trim()) {
     return {
@@ -178,7 +192,10 @@ function analyzeSentence(
     };
   }
 
-  const isHealthFood = isRegisteredHealthFood(productName);
+  // 외부에서 제품명이 안 들어오면 자막 문장 안에서 자동 탐색
+  const detectedProductName =
+    productName.trim() || findRegisteredHealthFoodInSentence(sentence);
+  const isHealthFood = isRegisteredHealthFood(detectedProductName);
 
   // ──────────────────────────────────
   // 1단계: 키워드 룰 매칭
@@ -219,49 +236,62 @@ function analyzeSentence(
     }
   }
 
-  // 예외가 해제하는 main_category 수집
   const exemptedMainCategories = new Set(
-    exceptionsHit.map(e => e.mainCategory)
+    exceptionsHit.map((e) => e.mainCategory)
   );
 
-  // 건기식 등록 제품이면 1.4 룰 해제
   let effectiveRuleHits = ruleHits;
 
+  // 1. 건기식 등록 제품이면 1.4(건기식 오인·사칭) 룰 해제
   if (isHealthFood) {
     effectiveRuleHits = effectiveRuleHits.filter(
-      h => !h.mainCategory.startsWith('1.4')
+      (h) => !h.mainCategory.startsWith('1.4')
     );
   }
 
-  // 예외 매칭된 main_category 룰 해제
+  // 2. 2.4(미인정 기능성)는 현재 자동 판정에서 제외
   effectiveRuleHits = effectiveRuleHits.filter(
-    h => !exemptedMainCategories.has(h.mainCategory)
+    (h) => !h.mainCategory.startsWith('2.4')
   );
 
-  const ruleWeightSum = effectiveRuleHits.reduce(
-    (sum, h) => sum + h.weight, 0
+  // 예외 처리 전 상태를 저장하여 순수 예외 제거 건수만 계산
+  const hitsBeforeExceptionFilter = effectiveRuleHits;
+
+  // 예외 매칭된 main_category 룰 해제
+  effectiveRuleHits = effectiveRuleHits.filter(
+    (h) => !exemptedMainCategories.has(h.mainCategory)
   );
+
+  const removedByExceptionCount =
+    hitsBeforeExceptionFilter.length - effectiveRuleHits.length;
+
+  const ruleWeightSum = effectiveRuleHits.reduce((sum, h) => sum + h.weight, 0);
 
   // ──────────────────────────────────
   // 룰 판정: ≥ 8점이면 Rule-Positive (즉시 반환)
   // ──────────────────────────────────
-  // 왜 즉시 반환: 룰에서 위반 확정되면 트리거(2차 신호)를 더 볼 필요가 없음
 
   if (ruleWeightSum >= 8) {
     let warningMessage: string | null = null;
     let verificationUrl: string | null = null;
 
-    if (isHealthFood) {
+    // 3. Rule-Positive 중 1.1/1.2 + 건기식일 때만 허가 기능성 URL 제공
+    const hasDiseaseRelatedHit = effectiveRuleHits.some(
+      (h) =>
+        h.mainCategory.startsWith('1.1') || h.mainCategory.startsWith('1.2')
+    );
+
+    if (isHealthFood && hasDiseaseRelatedHit) {
       warningMessage =
-        `해당 제품('${productName}')은 건강기능식품으로 등재되어 있으나, ` +
-        `위법 가능성이 있는 표현이 감지되었습니다. ` +
-        `허가받은 기능성을 직접 확인해보세요.`;
+        `해당 제품('${detectedProductName}')은 건강기능식품으로 등재되어 있으나, ` +
+        `질병 치료·질병 연관 표현이 감지되었습니다. ` +
+        `해당 표현이 허가 기능성 범위에 해당하는지 직접 확인해보세요.`;
       verificationUrl = HEALTH_FOOD_VERIFY_URL;
     }
 
     return {
       sentence,
-      productName,
+      productName: detectedProductName,
       isHealthFood,
       finalStatus: 'Rule-Positive',
       warningMessage,
@@ -270,7 +300,7 @@ function analyzeSentence(
         weightSum: ruleWeightSum,
         hits: effectiveRuleHits,
         exceptionsHit,
-        removedByException: ruleHits.length - effectiveRuleHits.length,
+        removedByException: removedByExceptionCount,
       },
       triggerAnalysis: null,
     };
@@ -299,14 +329,11 @@ function analyzeSentence(
     }
   }
 
-  const triggerWeightSum = triggerHits.reduce(
-    (sum, h) => sum + h.weight, 0
-  );
+  const triggerWeightSum = triggerHits.reduce((sum, h) => sum + h.weight, 0);
 
   // ──────────────────────────────────
   // 트리거 판정: ≥ 1.5점이면 Route-to-Model
   // ──────────────────────────────────
-  // 왜 Route-to-Model: 룰로는 확정 못 하지만 의심 신호가 쌓인 문장 → 다음 단계(모델) 검증 대상
 
   let finalStatus: FinalStatus;
 
@@ -316,20 +343,12 @@ function analyzeSentence(
     finalStatus = 'Rule-Negative';
   }
 
-  // 건기식 안내 (Route-to-Model인 경우)
   let warningMessage: string | null = null;
   let verificationUrl: string | null = null;
 
-  if (isHealthFood && finalStatus === 'Route-to-Model') {
-    warningMessage =
-      `해당 제품('${productName}')은 건강기능식품으로 등재되어 있습니다. ` +
-      `허가받은 기능성을 직접 확인해보세요.`;
-    verificationUrl = HEALTH_FOOD_VERIFY_URL;
-  }
-
   return {
     sentence,
-    productName,
+    productName: detectedProductName, // ⭐️ 탐색된 이름으로 반환
     isHealthFood,
     finalStatus,
     warningMessage,
@@ -338,7 +357,7 @@ function analyzeSentence(
       weightSum: ruleWeightSum,
       hits: effectiveRuleHits,
       exceptionsHit,
-      removedByException: ruleHits.length - effectiveRuleHits.length,
+      removedByException: removedByExceptionCount,
     },
     triggerAnalysis: {
       weightSum: triggerWeightSum,
@@ -348,7 +367,7 @@ function analyzeSentence(
   };
 }
 
-// 외부 소비자는 adScan(analyzeSentence) 과 그 결과 타입(AnalysisResult/FinalStatus) 뿐.
-//   isRegisteredHealthFood·RuleHit·TriggerHit·ExceptionHit 는 이 파일 안에서만 쓰여 export 하지 않는다.
-export { analyzeSentence };
+// findRegisteredHealthFoodInSentence: adScan 이 자막 전체에서 "영상 단위 제품명"을 1회 찾을 때 사용.
+//   analyzeSentence 전체를 돌리면 룰·트리거 매칭까지 같이 실행되어 비용이 두 배가 되므로, 이름 탐색만 분리해서 노출한다.
+export { analyzeSentence, findRegisteredHealthFoodInSentence };
 export type { AnalysisResult, FinalStatus };

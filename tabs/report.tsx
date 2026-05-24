@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react"
 
 import { scanCaptions, type ScannedLine } from "~lib/adScan"
+import { buildDataset } from "~lib/datasetExport"
 import { getStoredCaption } from "~lib/storage"
 import { formatTime, STATUS_VIEW } from "~lib/scanView"
 
@@ -104,6 +105,9 @@ function Report() {
         · 위반 {positive} · 의심 {route}
       </p>
 
+      {/* AI 학습 데이터셋 수집용 — 위반 줄이 있을 때만 활성화 (없으면 export 의미 없음) */}
+      <ExportBar videoId={videoId} flagged={flagged} positive={positive} />
+
       {flagged.length === 0 ? (
         <p style={styles.meta}>위반·의심 신호가 발견되지 않았습니다 ✅</p>
       ) : (
@@ -113,6 +117,85 @@ function Report() {
         ))
       )}
     </Shell>
+  )
+}
+
+// AI 파인튜닝 데이터셋 수집 바 — "JSON 복사"·"JSON 다운로드" 두 버튼.
+//   왜 이 위치: 보고서 상단의 카운트 meta 바로 아래 — 위반이 0건이면 버튼이 회색이라
+//   "수집할 게 없음"이 한눈에 보인다.
+//   무엇이 들어가 → 처리 → 무엇이 반환:
+//     videoId, flagged(위반+의심 줄), positive(위반 개수) →
+//     클릭 시 buildDataset 으로 Rule-Positive 만 JSON 화 → clipboard / Blob 다운로드.
+function ExportBar({
+  videoId,
+  flagged,
+  positive
+}: {
+  videoId: string
+  flagged: ScannedLine[]
+  positive: number
+}) {
+  // 클립보드 복사 직후 "복사됨 ✓" 라벨로 잠깐 바꿔주는 피드백 (사용자가 클릭이 먹었는지 즉시 확인)
+  const [copied, setCopied] = useState(false)
+
+  // 위반 0건이면 export 자체가 의미 없음 — 양쪽 핸들러 모두 가드
+  const disabled = positive === 0
+
+  const onCopy = async () => {
+    if (disabled) return
+    // 위반(Rule-Positive)만 추려 JSON 객체 → 들여쓰기 2칸 문자열 → 클립보드.
+    //   왜 들여쓰기: 노션 코드블록에 그대로 붙여도 사람이 검토 가능하도록.
+    const payload = buildDataset(flagged)
+    await navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
+    setCopied(true)
+    // 2초 후 라벨 원복 — 한 번 복사하고 끝이 아니라 여러 번 누를 수 있어야 하므로
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const onDownload = () => {
+    if (disabled) return
+    const payload = buildDataset(flagged)
+    // Blob → object URL → 임시 <a> 클릭 → URL revoke 의 표준 다운로드 트리거 패턴.
+    //   왜 이렇게: chrome.downloads 권한 없이도 사용자 다운로드 폴더로 떨어뜨리기 위함.
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json"
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `violations_${videoId}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div style={styles.exportBar}>
+      <button
+        type="button"
+        onClick={onCopy}
+        disabled={disabled}
+        style={{
+          ...styles.exportBtn,
+          ...(disabled ? styles.exportBtnDisabled : {})
+        }}>
+        {copied ? "복사됨 ✓" : "JSON 복사"}
+      </button>
+      <button
+        type="button"
+        onClick={onDownload}
+        disabled={disabled}
+        style={{
+          ...styles.exportBtn,
+          ...(disabled ? styles.exportBtnDisabled : {})
+        }}>
+        JSON 다운로드
+      </button>
+      <span style={styles.exportHint}>
+        {disabled
+          ? "위반 0건 — 수집할 데이터 없음"
+          : `위반 ${positive}건을 AI 학습용 JSON 으로 내보냅니다`}
+      </span>
+    </div>
   )
 }
 
@@ -319,7 +402,32 @@ const styles: Record<string, React.CSSProperties> = {
     borderBottom: "1px solid #f0f0f0",
     verticalAlign: "top"
   },
-  note: { marginTop: 10, color: "#8a6d00", fontSize: 13 }
+  note: { marginTop: 10, color: "#8a6d00", fontSize: 13 },
+  exportBar: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 20,
+    padding: "10px 12px",
+    background: "#f8f9fb",
+    border: "1px solid #e3e3e3",
+    borderRadius: 6
+  },
+  exportBtn: {
+    padding: "6px 12px",
+    fontSize: 13,
+    fontWeight: 600,
+    color: "#fff",
+    background: "#1a73e8",
+    border: "none",
+    borderRadius: 4,
+    cursor: "pointer"
+  },
+  exportBtnDisabled: {
+    background: "#cfcfcf",
+    cursor: "not-allowed"
+  },
+  exportHint: { color: "#666", fontSize: 12, marginLeft: 4 }
 }
 
 export default Report
