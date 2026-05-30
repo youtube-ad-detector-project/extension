@@ -16,6 +16,7 @@ import {
   type ScannedLine
 } from "~lib/adScan"
 import { getVideoIdFromUrl } from "~lib/captions"
+import { buildDataset } from "~lib/datasetExport"
 import type {
   CaptionsError,
   CaptionsPayload,
@@ -158,12 +159,11 @@ function Overlay() {
   // 두 패널을 형제로 렌더 — 각자 open 상태를 따로 들고, 위치 슬롯이 달라 동시에 떠도 안 겹침
   return (
     <>
-      {/* videoId 는 위 `if (!videoId) return null` 가드를 지나 string 으로 좁혀짐 → 두 패널의 보고서 URL 키 */}
+      {/* videoId 는 위 `if (!videoId) return null` 가드를 지나 string 으로 좁혀짐 → ViolationPanel 의 보고서 URL 키 */}
       <SubtitlePanel
         entry={entry}
         scanned={scanned}
         summary={summary}
-        videoId={videoId}
       />
       <ViolationPanel
         scanned={scanned}
@@ -183,7 +183,8 @@ function statusDot(summary: ScanSummary | null): string {
   return "#1f7a34"
 }
 
-// 보고서 진입 링크 — 두 패널(CC·⚠)이 똑같이 쓰는 진입점이라 컴포넌트로 묶어 한 곳만 고치게.
+// 보고서 진입 링크 — ViolationPanel(⚠) 에서만 사용. CC 패널과 함께 두 곳에 두면 같은 진입점이
+//   중복돼 헷갈리므로 위반/의심 패널 한쪽으로 일원화한다.
 //   무엇이 들어가 → 처리 → 무엇이 반환: videoId+summary → (위반·의심 있으면) 링크 버튼 / 없으면 null
 function ReportLink({
   videoId,
@@ -213,18 +214,59 @@ function ReportLink({
   )
 }
 
+// JSON 복사 버튼 — 위반·의심 줄(scanned 중 Rule-Negative 제외) 을 {text, status} JSON 으로 클립보드 복사.
+//   왜 오버레이로 이동: 보고서 탭에서 굳이 한 번 더 클릭할 필요 없이, 영상 보면서 바로 노션에 붙여넣을 수 있게.
+//   무엇이 들어가 → 처리 → 무엇이 반환:
+//     scanned(전체 스캔 결과) → buildDataset 으로 위반·의심만 {text, status} 화 → 들여쓰기 2칸 문자열 → clipboard
+function CopyDatasetButton({ scanned }: { scanned: ScannedLine[] | null }) {
+  // 클릭 직후 "복사됨 ✓" 라벨로 잠깐 바꿔 사용자에게 "동작했음" 피드백 (2초 후 원복)
+  const [copied, setCopied] = useState(false)
+
+  // scanned 가 없거나(분석 전) 위반·의심 줄이 0건이면 복사할 데이터가 없으므로 버튼 비활성
+  const flagged = scanned
+    ? scanned.filter((l) => l.status !== "Rule-Negative")
+    : []
+  const disabled = flagged.length === 0
+
+  const onCopy = async () => {
+    if (disabled) return
+    // buildDataset: ScannedLine[] → [{text, status}] 외부 라벨로 변환 (Rule-Negative 자동 제외)
+    //   왜 들여쓰기 2칸: 노션 코드블록에 그대로 붙여도 사람이 읽기 좋게.
+    const payload = buildDataset(flagged)
+    await navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
+    setCopied(true)
+    // 한 영상에서 여러 번 복사할 수 있어야 하므로 2초 뒤 라벨 원복
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <button
+      onClick={onCopy}
+      disabled={disabled}
+      style={{
+        ...styles.reportLink,
+        ...(disabled ? styles.copyBtnDisabled : {})
+      }}
+      title={
+        disabled
+          ? "위반·의심 0건 — 복사할 데이터 없음"
+          : `위반·의심 ${flagged.length}건을 JSON 으로 클립보드에 복사`
+      }>
+      {copied ? "복사됨 ✓" : `📋 JSON 복사 (${flagged.length}건)`}
+    </button>
+  )
+}
+
 // ── 자막 패널: 전체 자막 줄을 상태색으로 렌더 (기존 동작 그대로, 위치도 right:12 유지) ──
 //   props 로 부모가 계산한 entry/scanned/summary 를 받는다 (자체 storage 구독 없음)
 function SubtitlePanel({
   entry,
   scanned,
-  summary,
-  videoId
+  summary
 }: {
   entry: StoredEntry | null
   scanned: ScannedLine[] | null
   summary: ScanSummary | null
-  videoId: string // 위반이 하이라이트돼 보이는 패널이라, 여기서도 보고서로 바로 갈 수 있게
 }) {
   // 토글 열림 여부 — 닫힌 상태가 기본 (영상 가리지 않게)
   const [open, setOpen] = useState(false)
@@ -246,7 +288,9 @@ function SubtitlePanel({
     )
   }
 
-  // 열린 상태: 헤더 + 전체 segments 리스트
+  // 열린 상태: 헤더 + 전체 segments 리스트.
+  //   보고서/JSON 복사 같은 위반 관련 액션은 ViolationPanel(⚠) 한 곳으로 일원화했으므로
+  //   여기엔 따로 진입 링크를 두지 않는다 (중복 제거)
   return (
     <div style={{ ...styles.panel, right: SLOT_SUBTITLE_RIGHT }}>
       <div style={styles.panelHeader}>
@@ -259,8 +303,6 @@ function SubtitlePanel({
           ×
         </button>
       </div>
-      {/* 위반·의심이 있으면 헤더 아래에 보고서 진입 링크 (없으면 ReportLink 가 null) */}
-      <ReportLink videoId={videoId} summary={summary} />
       <div style={styles.panelBody}>{renderBody(entry, scanned)}</div>
     </div>
   )
@@ -311,8 +353,10 @@ function ViolationPanel({
           ×
         </button>
       </div>
-      {/* CC 패널과 동일한 진입점을 공유 (위반·의심 없으면 ReportLink 가 null) */}
+      {/* 위반·의심 줄에 대한 액션 묶음: 보고서 진입 + AI 학습용 JSON 클립보드 복사
+            둘 다 위반·의심 0건일 때는 비활성/숨김 → 데이터 있는 경우만 노출 */}
       <ReportLink videoId={videoId} summary={summary} />
+      <CopyDatasetButton scanned={scanned} />
       <div style={styles.panelBody}>{renderViolationBody(scanned)}</div>
     </div>
   )
@@ -505,6 +549,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     cursor: "pointer",
     fontFamily: "inherit"
+  },
+  copyBtnDisabled: {
+    // 위반·의심 0건일 때 — 톤 다운 + cursor 변경으로 "지금은 못 누름" 표시
+    background: "rgba(255,255,255,0.06)",
+    color: "#888",
+    cursor: "not-allowed"
   },
   panelBody: {
     overflowY: "auto",

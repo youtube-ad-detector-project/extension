@@ -9,7 +9,7 @@
  *
  * 흐름:
  *   자막 문장 입력
- *     → (NEW) 문장 내 건기식 제품명 자동 탐색
+ *     → 문장 내 건기식 제품명 자동 탐색
  *     → 키워드 룰 매칭 (keyword_dict.json)
  *     → 예외처리 적용 (해당 룰 가중치 해제)
  *     → 최종 룰 가중치 합 ≥ 8점? → 위반 확정 (Rule-Positive)
@@ -81,6 +81,8 @@ interface CompiledRule {
   weight: number;
   is_exception: boolean;
   pattern: RegExp;
+  // matchedText 보정용: 룰 정규식에서 미리 뽑아둔 리터럴 후보들 (런타임 추출 비용을 1회만 지불)
+  evidenceCandidates: string[];
 }
 
 interface CompiledTrigger {
@@ -89,6 +91,7 @@ interface CompiledTrigger {
   level: string;
   pattern: RegExp;
   weight: number;
+  evidenceCandidates: string[];
 }
 
 // ────────────────────────────────────────
@@ -134,6 +137,108 @@ function findRegisteredHealthFoodInSentence(sentence: string): string {
 }
 
 // ────────────────────────────────────────
+// matchedText 보정 유틸
+// ────────────────────────────────────────
+
+/**
+ * RegExp.match()[0] 이 빈 문자열이 되는 룰을 위한 matchedText 보정.
+ *
+ * keyword_dict 의 조합형 룰은 (?=.*A)(?=.*B) 같은 lookahead 만으로 구성된 경우가 많다.
+ * 이런 룰은 문장 전체가 매칭돼도 실제 match[0] 이 "" 로 나와, 리포트에서 근거 표현이
+ * 비어 보이는 문제가 있다. 정규식 안에 적힌 리터럴 후보 중 실제 문장에 포함된 표현을
+ * best-effort 로 골라 채워 근거가 사라지지 않게 한다.
+ */
+function normalizeEvidenceText(value: string): string {
+  return value.replace(/[^a-zA-Z0-9가-힣]/g, '').toLowerCase();
+}
+
+// 정규식 단편에서 메타문자를 걷어내 사람 눈에 보일 만한 평문으로 변환
+function regexFragmentToPlainText(fragment: string): string {
+  return fragment
+    .replace(/\\s\*/g, '')
+    .replace(/\\s\+/g, '')
+    .replace(/\\s/g, '')
+    .replace(/\.\{0,\d+\}/g, '')
+    .replace(/\.\*/g, '')
+    .replace(/\\d/g, '')
+    .replace(/\\./g, (m) => m.slice(1))
+    .replace(/[\^$()[\]{}?*+.|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function splitRegexAlternatives(body: string): string[] {
+  // 현재 사전 정규식은 대부분 단순한 A|B|C 대안 구조다. 괄호 중첩이 있으면 무리해서 쪼개지 않는다.
+  if (!body.includes('|')) return [body];
+  return body.split('|');
+}
+
+function pushCandidate(candidates: string[], fragment: string): void {
+  const candidate = regexFragmentToPlainText(fragment);
+  if (normalizeEvidenceText(candidate).length >= 2) {
+    candidates.push(candidate);
+  }
+}
+
+// 정규식 문자열 → 리터럴 후보 배열. 룰 컴파일 시점에 1회만 호출되므로 비용은 무시 가능.
+function extractLiteralCandidatesFromRegex(regex: string): string[] {
+  const candidates: string[] = [];
+
+  // 1) (?:A|B|C) 또는 (?:A) 형태의 non-capturing group 추출 — 단일 후보도 보존
+  const groupPattern = /\(\?:((?:\\.|[^()])*)\)/g;
+  let groupMatch: RegExpExecArray | null;
+
+  while ((groupMatch = groupPattern.exec(regex)) !== null) {
+    const body = groupMatch[1];
+    for (const branch of splitRegexAlternatives(body)) {
+      pushCandidate(candidates, branch);
+    }
+  }
+
+  // 2) (?=.*어지럼증)(?=.*치료) 처럼 (?:...) 없이 작성된 단일 lookahead 도 추출
+  const simpleLookaheadPattern = /\(\?=\.\*([^()]+)\)/g;
+  let lookaheadMatch: RegExpExecArray | null;
+
+  while ((lookaheadMatch = simpleLookaheadPattern.exec(regex)) !== null) {
+    const body = lookaheadMatch[1];
+    for (const branch of splitRegexAlternatives(body)) {
+      pushCandidate(candidates, branch);
+    }
+  }
+
+  return Array.from(new Set(candidates));
+}
+
+// match[0] 우선, 비었으면 evidenceCandidates 중 문장에 포함된 표현으로 채움. 둘 다 없으면 원문 문장.
+function extractMatchedText(
+  sentence: string,
+  evidenceCandidates: string[],
+  directMatch: string | undefined
+): string {
+  const direct = directMatch?.trim();
+  if (direct) return direct;
+
+  const normalizedSentence = normalizeEvidenceText(sentence);
+  const candidates = evidenceCandidates
+    .filter((candidate) =>
+      normalizedSentence.includes(normalizeEvidenceText(candidate))
+    )
+    .sort((a, b) => {
+      const posA = normalizedSentence.indexOf(normalizeEvidenceText(a));
+      const posB = normalizedSentence.indexOf(normalizeEvidenceText(b));
+      if (posA !== posB) return posA - posB;
+      return b.length - a.length;
+    });
+
+  if (candidates.length > 0) {
+    return candidates.slice(0, 8).join(' / ');
+  }
+
+  // 마지막 안전장치: 빈 문자열보다는 원문 문장을 남겨 리포트에서 근거가 사라지지 않게 한다.
+  return sentence;
+}
+
+// ────────────────────────────────────────
 // 초기화: 룰·예외·트리거 정규식 컴파일
 // ────────────────────────────────────────
 
@@ -144,6 +249,7 @@ for (const rule of (keywordDict as any).rules) {
   const compiled: CompiledRule = {
     ...rule,
     pattern: new RegExp(rule.regex),
+    evidenceCandidates: extractLiteralCandidatesFromRegex(rule.regex),
   };
   if (rule.is_exception) {
     compiledExceptions.push(compiled);
@@ -161,6 +267,7 @@ const compiledTriggers: CompiledTrigger[] = (
     level: s.level,
     pattern: new RegExp(s.regex),
     weight: (triggerDict as any).weight_by_strength[s.level],
+    evidenceCandidates: extractLiteralCandidatesFromRegex(s.regex),
   }))
 );
 
@@ -205,6 +312,7 @@ function analyzeSentence(
   const seenSubCategories = new Set<string>();
 
   for (const rule of compiledRules) {
+    // 같은 sub_category 는 한 번만 점수에 반영 — 중복 가산 방지
     if (seenSubCategories.has(rule.sub_category)) continue;
 
     const match = sentence.match(rule.pattern);
@@ -212,7 +320,8 @@ function analyzeSentence(
       ruleHits.push({
         mainCategory: rule.main_category,
         subCategory: rule.sub_category,
-        matchedText: match[0],
+        // lookahead 룰 대응: match[0] 이 비어도 evidenceCandidates 로 보정
+        matchedText: extractMatchedText(sentence, rule.evidenceCandidates, match[0]),
         weight: rule.weight,
       });
       seenSubCategories.add(rule.sub_category);
@@ -231,7 +340,7 @@ function analyzeSentence(
       exceptionsHit.push({
         mainCategory: exc.main_category,
         subCategory: exc.sub_category,
-        matchedText: match[0],
+        matchedText: extractMatchedText(sentence, exc.evidenceCandidates, match[0]),
       });
     }
   }
@@ -322,7 +431,7 @@ function analyzeSentence(
         category: trigger.categoryId,
         categoryName: trigger.categoryName,
         level: trigger.level,
-        matchedText: match[0],
+        matchedText: extractMatchedText(sentence, trigger.evidenceCandidates, match[0]),
         weight: trigger.weight,
       });
       seenTriggerCategories.add(trigger.categoryId);
