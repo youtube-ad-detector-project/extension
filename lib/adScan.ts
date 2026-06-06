@@ -90,9 +90,13 @@ export function scanCaptions(
           .join(', ')})`
       );
     } else if (result.finalStatus === 'Route-to-Model') {
+      // 트리거 카테고리가 비어 있어도 빈 괄호 "()" 대신 "없음" 으로 찍어 로그 형식을 안정화
+      const triggerCategories = result.triggerAnalysis?.categoriesHit ?? [];
+      const categoryLabel =
+        triggerCategories.length > 0 ? triggerCategories.join(', ') : '없음';
       console.log(
         TAG,
-        `⚠️ [의심] ${seg.start.toFixed(1)}s "${seg.text}" — 트리거 ${result.triggerAnalysis?.weightSum}점 (${result.triggerAnalysis?.categoriesHit.join(', ')})`
+        `⚠️ [의심] ${seg.start.toFixed(1)}s "${seg.text}" — 트리거 ${result.triggerAnalysis?.weightSum}점 (${categoryLabel})`
       );
     }
 

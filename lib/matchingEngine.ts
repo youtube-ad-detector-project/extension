@@ -81,8 +81,6 @@ interface CompiledRule {
   weight: number;
   is_exception: boolean;
   pattern: RegExp;
-  // matchedText 보정용: 룰 정규식에서 미리 뽑아둔 리터럴 후보들 (런타임 추출 비용을 1회만 지불)
-  evidenceCandidates: string[];
 }
 
 interface CompiledTrigger {
@@ -91,7 +89,6 @@ interface CompiledTrigger {
   level: string;
   pattern: RegExp;
   weight: number;
-  evidenceCandidates: string[];
 }
 
 // ────────────────────────────────────────
@@ -137,104 +134,28 @@ function findRegisteredHealthFoodInSentence(sentence: string): string {
 }
 
 // ────────────────────────────────────────
-// matchedText 보정 유틸
+// matchedText 결정 유틸
 // ────────────────────────────────────────
 
 /**
- * RegExp.match()[0] 이 빈 문자열이 되는 룰을 위한 matchedText 보정.
+ * matchedText(리포트에 보여줄 "근거 표현")를 결정한다.
  *
  * keyword_dict 의 조합형 룰은 (?=.*A)(?=.*B) 같은 lookahead 만으로 구성된 경우가 많다.
- * 이런 룰은 문장 전체가 매칭돼도 실제 match[0] 이 "" 로 나와, 리포트에서 근거 표현이
- * 비어 보이는 문제가 있다. 정규식 안에 적힌 리터럴 후보 중 실제 문장에 포함된 표현을
- * best-effort 로 골라 채워 근거가 사라지지 않게 한다.
+ * 이런 룰은 문장이 매칭돼도 match[0] 이 "" 로 나와 근거가 비어 보인다.
+ * 무엇이 들어가 → 처리 → 무엇이 나오는지:
+ *   (문장, match[0]) → match[0] 에 실제 텍스트가 있으면 그대로,
+ *                      비었으면(=lookahead 룰) 문장 전체를 근거로 사용 → matchedText 문자열
+ * 정규식 리터럴을 추측해 부분 표현을 채우던 방식보다, 문장 전체를 남기는 쪽이 안정적이라
+ * 리포트에서 근거가 사라지거나 엉뚱한 단편이 잡히는 문제를 막는다.
  */
-function normalizeEvidenceText(value: string): string {
-  return value.replace(/[^a-zA-Z0-9가-힣]/g, '').toLowerCase();
-}
-
-// 정규식 단편에서 메타문자를 걷어내 사람 눈에 보일 만한 평문으로 변환
-function regexFragmentToPlainText(fragment: string): string {
-  return fragment
-    .replace(/\\s\*/g, '')
-    .replace(/\\s\+/g, '')
-    .replace(/\\s/g, '')
-    .replace(/\.\{0,\d+\}/g, '')
-    .replace(/\.\*/g, '')
-    .replace(/\\d/g, '')
-    .replace(/\\./g, (m) => m.slice(1))
-    .replace(/[\^$()[\]{}?*+.|]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function splitRegexAlternatives(body: string): string[] {
-  // 현재 사전 정규식은 대부분 단순한 A|B|C 대안 구조다. 괄호 중첩이 있으면 무리해서 쪼개지 않는다.
-  if (!body.includes('|')) return [body];
-  return body.split('|');
-}
-
-function pushCandidate(candidates: string[], fragment: string): void {
-  const candidate = regexFragmentToPlainText(fragment);
-  if (normalizeEvidenceText(candidate).length >= 2) {
-    candidates.push(candidate);
-  }
-}
-
-// 정규식 문자열 → 리터럴 후보 배열. 룰 컴파일 시점에 1회만 호출되므로 비용은 무시 가능.
-function extractLiteralCandidatesFromRegex(regex: string): string[] {
-  const candidates: string[] = [];
-
-  // 1) (?:A|B|C) 또는 (?:A) 형태의 non-capturing group 추출 — 단일 후보도 보존
-  const groupPattern = /\(\?:((?:\\.|[^()])*)\)/g;
-  let groupMatch: RegExpExecArray | null;
-
-  while ((groupMatch = groupPattern.exec(regex)) !== null) {
-    const body = groupMatch[1];
-    for (const branch of splitRegexAlternatives(body)) {
-      pushCandidate(candidates, branch);
-    }
-  }
-
-  // 2) (?=.*어지럼증)(?=.*치료) 처럼 (?:...) 없이 작성된 단일 lookahead 도 추출
-  const simpleLookaheadPattern = /\(\?=\.\*([^()]+)\)/g;
-  let lookaheadMatch: RegExpExecArray | null;
-
-  while ((lookaheadMatch = simpleLookaheadPattern.exec(regex)) !== null) {
-    const body = lookaheadMatch[1];
-    for (const branch of splitRegexAlternatives(body)) {
-      pushCandidate(candidates, branch);
-    }
-  }
-
-  return Array.from(new Set(candidates));
-}
-
-// match[0] 우선, 비었으면 evidenceCandidates 중 문장에 포함된 표현으로 채움. 둘 다 없으면 원문 문장.
 function extractMatchedText(
   sentence: string,
-  evidenceCandidates: string[],
   directMatch: string | undefined
 ): string {
   const direct = directMatch?.trim();
+  // 일반 룰: match[0] 에 매칭 텍스트가 있으면 그대로 근거로 사용
   if (direct) return direct;
-
-  const normalizedSentence = normalizeEvidenceText(sentence);
-  const candidates = evidenceCandidates
-    .filter((candidate) =>
-      normalizedSentence.includes(normalizeEvidenceText(candidate))
-    )
-    .sort((a, b) => {
-      const posA = normalizedSentence.indexOf(normalizeEvidenceText(a));
-      const posB = normalizedSentence.indexOf(normalizeEvidenceText(b));
-      if (posA !== posB) return posA - posB;
-      return b.length - a.length;
-    });
-
-  if (candidates.length > 0) {
-    return candidates.slice(0, 8).join(' / ');
-  }
-
-  // 마지막 안전장치: 빈 문자열보다는 원문 문장을 남겨 리포트에서 근거가 사라지지 않게 한다.
+  // lookahead 전용 룰: match[0] 이 "" 이므로 문장 전체를 근거로 남김
   return sentence;
 }
 
@@ -249,7 +170,6 @@ for (const rule of (keywordDict as any).rules) {
   const compiled: CompiledRule = {
     ...rule,
     pattern: new RegExp(rule.regex),
-    evidenceCandidates: extractLiteralCandidatesFromRegex(rule.regex),
   };
   if (rule.is_exception) {
     compiledExceptions.push(compiled);
@@ -267,7 +187,6 @@ const compiledTriggers: CompiledTrigger[] = (
     level: s.level,
     pattern: new RegExp(s.regex),
     weight: (triggerDict as any).weight_by_strength[s.level],
-    evidenceCandidates: extractLiteralCandidatesFromRegex(s.regex),
   }))
 );
 
@@ -320,8 +239,8 @@ function analyzeSentence(
       ruleHits.push({
         mainCategory: rule.main_category,
         subCategory: rule.sub_category,
-        // lookahead 룰 대응: match[0] 이 비어도 evidenceCandidates 로 보정
-        matchedText: extractMatchedText(sentence, rule.evidenceCandidates, match[0]),
+        // lookahead 룰 대응: match[0] 이 비면 문장 전체를 근거로 사용
+        matchedText: extractMatchedText(sentence, match[0]),
         weight: rule.weight,
       });
       seenSubCategories.add(rule.sub_category);
@@ -332,22 +251,19 @@ function analyzeSentence(
   // 예외처리 적용: 매칭된 예외 → 해당 룰 가중치 해제
   // ──────────────────────────────────
 
-  const exceptionsHit: ExceptionHit[] = [];
+  // 먼저 문장에 매칭되는 예외 룰을 전부 모은다 — 이 시점엔 "실제로 제거할 룰이 있는지" 아직 모름
+  const matchedExceptions: ExceptionHit[] = [];
 
   for (const exc of compiledExceptions) {
     const match = sentence.match(exc.pattern);
     if (match) {
-      exceptionsHit.push({
+      matchedExceptions.push({
         mainCategory: exc.main_category,
         subCategory: exc.sub_category,
-        matchedText: extractMatchedText(sentence, exc.evidenceCandidates, match[0]),
+        matchedText: extractMatchedText(sentence, match[0]),
       });
     }
   }
-
-  const exemptedMainCategories = new Set(
-    exceptionsHit.map((e) => e.mainCategory)
-  );
 
   let effectiveRuleHits = ruleHits;
 
@@ -366,11 +282,27 @@ function analyzeSentence(
   // 예외 처리 전 상태를 저장하여 순수 예외 제거 건수만 계산
   const hitsBeforeExceptionFilter = effectiveRuleHits;
 
+  // 실제 룰 hit 가 존재하는 main_category 집합 — 예외가 "제거할 대상"이 있는지 판단 기준
+  const hitMainCategories = new Set(
+    hitsBeforeExceptionFilter.map((h) => h.mainCategory)
+  );
+
+  // 매칭됐어도 해당 main_category 에 룰 hit 가 없으면 제거할 게 없는 노이즈이므로,
+  // 실제 제거 가능한 예외만 남겨 출력 정합성을 맞춘다.
+  const exceptionsHit = matchedExceptions.filter((e) =>
+    hitMainCategories.has(e.mainCategory)
+  );
+
+  const exemptedMainCategories = new Set(
+    exceptionsHit.map((e) => e.mainCategory)
+  );
+
   // 예외 매칭된 main_category 룰 해제
   effectiveRuleHits = effectiveRuleHits.filter(
     (h) => !exemptedMainCategories.has(h.mainCategory)
   );
 
+  // removedByException: 실제로 제거된 hit 수 (예외 필터 전후 길이 차)
   const removedByExceptionCount =
     hitsBeforeExceptionFilter.length - effectiveRuleHits.length;
 
@@ -431,7 +363,7 @@ function analyzeSentence(
         category: trigger.categoryId,
         categoryName: trigger.categoryName,
         level: trigger.level,
-        matchedText: extractMatchedText(sentence, trigger.evidenceCandidates, match[0]),
+        matchedText: extractMatchedText(sentence, match[0]),
         weight: trigger.weight,
       });
       seenTriggerCategories.add(trigger.categoryId);
