@@ -3,7 +3,12 @@
 //   2) overlay 의 OPEN_REPORT 를 받아 보고서 탭 열기 (콘텐츠 스크립트는 chrome.tabs 불가라 여기서)
 //   Plan A(main-world 후킹)·Plan B(HTML refetch)는 Shorts 에서 무용해 통째로 제거됨.
 
-import type { CaptionsPayload, RuntimeMessage } from "./lib/messages"
+import type {
+  CaptionsPayload,
+  ClassifyResponse,
+  ClassifyVerdict,
+  RuntimeMessage
+} from "./lib/messages"
 import {
   saveCaption,
   saveCaptionError,
@@ -20,8 +25,9 @@ const planEIntervals = new Map<string, ReturnType<typeof setInterval>>()
 
 console.log(TAG, "📌 service worker 시작됨 (STT 잡 처리 + 보고서 탭 담당)")
 
-// 단일 진입점: 메시지를 type 으로 분기 (이제 두 종류뿐)
-chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender) => {
+// 단일 진입점: 메시지를 type 으로 분기 (STT 트리거 / 보고서 / AI 검증)
+//   sendResponse: CLASSIFY 만 응답을 돌려줘야 해서 세 번째 인자로 받는다 (나머지는 fire-and-forget)
+chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender, sendResponse) => {
   console.log(
     TAG,
     `📨 메시지 수신: 종류=${msg.type}, 보낸 탭=${sender.tab?.id ?? "unknown"}`
@@ -34,23 +40,70 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender) => {
   }
 
   if (msg.type === "OPEN_REPORT") {
-    // 오버레이 링크 클릭 → 상세 위반 보고서 탭 열기
-    openReport(msg.videoId)
+    // 오버레이 링크 클릭 → 상세 보고서 탭 열기 (kind 로 1차 룰/2차 AI 분기)
+    openReport(msg.videoId, msg.kind ?? "rule")
     return false
+  }
+
+  if (msg.type === "CLASSIFY") {
+    // 오버레이가 룰에서 걸린 문장 배열을 검증 요청 → 서버로 프록시 후 결과를 sendResponse 로 돌려준다.
+    //   MV3 Chrome 규칙: 비동기 응답이라 채널을 열어두려면 반드시 true 를 반환해야 한다
+    void classifyViaServer(msg.texts).then(sendResponse)
+    return true
   }
 
   return false
 })
 
 // videoId → 확장 내부 보고서 탭 1개 생성 (side-effect 만).
-//   getURL: tabs/report.tsx 가 Plasmo 빌드 시 tabs/report.html 로 떨어지며 확장 절대 URL 로 변환됨
-//   ?v= 로 어떤 영상 보고서인지 전달 — 보고서 페이지가 이 값으로 storage 자막을 다시 읽는다
-function openReport(videoId: string): void {
-  const url = chrome.runtime.getURL(
-    `tabs/report.html?v=${encodeURIComponent(videoId)}`
-  )
-  console.log(TAG, `📄 보고서 탭 열기: 영상=${videoId}, url=${url}`)
+//   getURL: tabs/report*.tsx 가 Plasmo 빌드 시 tabs/report*.html 로 떨어지며 확장 절대 URL 로 변환됨
+//   kind: rule→report.html(1차 룰 근거) · ai→report2.html(2차 AI 동작). ?v= 로 어떤 영상인지 전달.
+function openReport(videoId: string, kind: "rule" | "ai"): void {
+  const page = kind === "ai" ? "tabs/report2.html" : "tabs/report.html"
+  const url = chrome.runtime.getURL(`${page}?v=${encodeURIComponent(videoId)}`)
+  console.log(TAG, `📄 보고서 탭 열기: 영상=${videoId}, 종류=${kind}, url=${url}`)
   void chrome.tabs.create({ url })
+}
+
+// flagged 문장 배열 → 서버 /api/classify → ClassifyResponse(성공 verdicts / 실패 reason).
+//   왜 background 에서 fetch: 콘텐츠 스크립트(오버레이)의 cross-origin 요청은 CORS 에 막히지만,
+//   service worker 는 host_permissions(localhost:3000)로 서버를 직접 부를 수 있다 (STT 와 같은 경로).
+//   무엇이 들어가 → 처리 → 무엇이 반환: texts(string[]) → HF 프록시 → 입력과 1:1 순서의 verdicts
+async function classifyViaServer(texts: string[]): Promise<ClassifyResponse> {
+  console.log(TAG, `🤖 AI 검증 요청: ${texts.length}문장 → ${STT_SERVER}/api/classify`)
+  try {
+    const res = await fetch(`${STT_SERVER}/api/classify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ texts })
+    })
+    if (!res.ok) {
+      // 서버가 실패하면 { error } 를 그대로 붙여 원인(hf_token_missing / hf_http_503 모델 로딩 등)을 가리지 않는다
+      const errBody = (await res.json().catch(() => null)) as { error?: string } | null
+      throw new Error(
+        errBody?.error ? `http ${res.status}: ${errBody.error}` : `http ${res.status}`
+      )
+    }
+    // 응답: { results: Verdict[] } — 서버가 isViolation 까지 계산해 준 상태
+    const body = (await res.json()) as { results?: ClassifyVerdict[] }
+    if (!Array.isArray(body.results)) {
+      throw new Error("bad_response")
+    }
+    const positives = body.results.filter((v) => v.isViolation).length
+    console.log(
+      TAG,
+      `✅ AI 검증 완료: 위법 ${positives} / 검증 ${body.results.length}`
+    )
+    return { ok: true, verdicts: body.results }
+  } catch (e) {
+    // fetch 실패(서버 다운)는 TypeError — 그 외는 메시지 그대로 노출
+    const reason =
+      e instanceof TypeError
+        ? "classify: server_unreachable"
+        : `classify: ${e instanceof Error ? e.message : String(e)}`
+    console.log(TAG, `❌ AI 검증 실패: ${reason}`)
+    return { ok: false, reason }
+  }
 }
 
 // STT 잡 등록 → 5초 폴링 → 결과를 saveCaption/saveCaptionError 로 수렴

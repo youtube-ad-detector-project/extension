@@ -21,6 +21,9 @@ import type {
   CaptionsError,
   CaptionsPayload,
   CaptionsPending,
+  ClassifyRequestMessage,
+  ClassifyResponse,
+  ClassifyVerdict,
   OpenReportMessage
 } from "~lib/messages"
 import { formatTime, STATUS_VIEW } from "~lib/scanView"
@@ -55,12 +58,24 @@ type StoredEntry =
   | { ok: false; data: CaptionsError; savedAt: number }
   | { ok: "pending"; data: CaptionsPending; savedAt: number }
 
+// AI 2차 검증의 상태 기계 — 룰 결과(scanned)와 background 응답으로 전이한다.
+//   idle: 아직 룰 결과 없음(STT 전/진행/실패) · skip: 걸린 줄 0건이라 검증 불필요
+//   running: background 로 검증 요청 보냄 · done: verdicts 수신(입력 flagged 와 1:1 순서) · error: 실패
+type AiState =
+  | { phase: "idle" }
+  | { phase: "skip" }
+  | { phase: "running"; total: number }
+  | { phase: "done"; verdicts: ClassifyVerdict[] }
+  | { phase: "error"; reason: string }
+
 const KEY_PREFIX = "caption:"
 
 // 두 패널이 겹치지 않도록 가로 슬롯을 분리 — 자막 패널은 right:12, 위반 패널은 그 왼쪽
 //   자막 패널 최대 폭(12 + 340)을 넘어선 지점에 둬야 자막이 열려 있어도 위반 토글이 안 가려진다
 const SLOT_SUBTITLE_RIGHT = 12
 const SLOT_VIOLATION_RIGHT = 364
+// 진행 패널은 위반 패널(364~704) 왼쪽 슬롯 — 세 패널이 동시에 열려도 안 겹치게 다음 칸에 둔다
+const SLOT_PROGRESS_RIGHT = 716
 
 // 상태별 짧은 한국어 라벨 — 헤더와 toggle title (hover) 에서 공통 사용
 const STAGE_LABEL: Record<CaptionsPending["stage"], string> = {
@@ -85,6 +100,8 @@ function Overlay() {
   )
   // chrome.storage.local 의 해당 영상 entry — null = 아직 기록 없음
   const [entry, setEntry] = useState<StoredEntry | null>(null)
+  // AI 2차 검증 상태 — 룰 결과가 나오면 effect 가 background 로 검증을 띄워 이 값을 전이시킨다
+  const [ai, setAi] = useState<AiState>({ phase: "idle" })
 
   // YouTube 는 SPA 라 페이지 전환 시 content script 가 재주입되지 않음 → URL 폴링으로 영상 변경 감지
   //   youtube-shorts.ts(STT 트리거)도 같은 1초 폴링 패턴을 쓴다
@@ -152,11 +169,61 @@ function Overlay() {
   }, [entry])
   const summary: ScanSummary | null = scanned ? summarize(scanned) : null
 
+  // 룰에서 걸린 줄(위반·의심)만 추림 — AI 검증의 입력이자, done 응답을 인덱스로 되돌려 매핑할 기준
+  //   useMemo: scanned 가 그대로면 같은 배열을 유지해 effect 가 불필요하게 재실행되지 않게
+  const flagged = useMemo<ScannedLine[]>(
+    () => (scanned ? scanned.filter((l) => l.status !== "Rule-Negative") : []),
+    [scanned]
+  )
+
+  // 룰 결과가 확정되면 flagged 문장을 background(CLASSIFY)로 보내 AI 2차 검증을 돌린다.
+  //   왜 effect: 룰 스캔(동기) 이후의 비동기 네트워크 작업이라 렌더 바깥에서 부수효과로 처리해야 함
+  //   데이터 형태: ScannedLine[] → texts(string[]) → (background→서버→HF) → ClassifyVerdict[]
+  useEffect(() => {
+    // 아직 룰 결과 없음(STT 전/진행/실패) → 검증 대기로 리셋
+    if (!scanned) {
+      setAi({ phase: "idle" })
+      return
+    }
+    // 걸린 줄이 없으면 검증할 게 없음 → 건너뜀
+    if (flagged.length === 0) {
+      setAi({ phase: "skip" })
+      return
+    }
+
+    // 검증 시작 — 텍스트만 배열로 추려 background 에 요청
+    setAi({ phase: "running", total: flagged.length })
+    const msg: ClassifyRequestMessage = {
+      type: "CLASSIFY",
+      texts: flagged.map((l) => l.text)
+    }
+    // cancelled: 영상 전환 등으로 scanned 가 바뀌면 이전 요청의 응답은 stale 이라 버린다
+    let cancelled = false
+    void chrome.runtime
+      .sendMessage(msg)
+      .then((res: ClassifyResponse | undefined) => {
+        if (cancelled) return
+        // 성공(ok:true)일 때만 verdicts 채택 — else 는 실패/응답없음을 reason 으로 표기
+        if (res && res.ok) {
+          setAi({ phase: "done", verdicts: res.verdicts })
+          return
+        }
+        const reason = res && res.ok === false ? res.reason : "unknown"
+        setAi({ phase: "error", reason })
+      })
+      .catch((e) => {
+        if (!cancelled) setAi({ phase: "error", reason: String(e) })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [scanned, flagged])
+
   // 영상 페이지가 아니거나 player 가 없으면 오버레이를 안 그림 (홈/채널로 SPA 이동했을 때)
-  //   주의: useMemo 호출 뒤에 둬야 훅 순서가 안정적 (early return 이 훅보다 앞서면 안 됨)
+  //   주의: 모든 훅(useMemo/useEffect) 뒤에 둬야 훅 순서가 안정적 (early return 이 훅보다 앞서면 안 됨)
   if (!videoId) return null
 
-  // 두 패널을 형제로 렌더 — 각자 open 상태를 따로 들고, 위치 슬롯이 달라 동시에 떠도 안 겹침
+  // 세 패널을 형제로 렌더 — 각자 open 상태를 따로 들고, 위치 슬롯이 달라 동시에 떠도 안 겹침
   return (
     <>
       {/* videoId 는 위 `if (!videoId) return null` 가드를 지나 string 으로 좁혀짐 → ViolationPanel 의 보고서 URL 키 */}
@@ -165,10 +232,20 @@ function Overlay() {
         scanned={scanned}
         summary={summary}
       />
+      {/* 위법 패널: 표시는 룰이 아니라 AI 검증(ai) 기준. ReportLink/JSON 복사는 1차(룰) 기준이라 summary/scanned 도 함께 넘김 */}
       <ViolationPanel
+        flagged={flagged}
+        ai={ai}
+        summary={summary}
+        scanned={scanned}
+        videoId={videoId}
+      />
+      {/* 진행 패널: 영상추출 → 룰엔진 → AI검증 3단계를 실시간으로 보여줌 */}
+      <ProgressPanel
+        entry={entry}
         scanned={scanned}
         summary={summary}
-        videoId={videoId}
+        ai={ai}
       />
     </>
   )
@@ -210,6 +287,33 @@ function ReportLink({
       style={styles.reportLink}
       title="새 탭에서 상세 근거 보고서 열기">
       📄 상세 위반 보고서 열기 ↗
+    </button>
+  )
+}
+
+// 2차 AI 보고서 진입 링크 — 클릭 시 background 가 report2.html(모델 동작 과정) 탭을 연다.
+//   ReportLink(1차 룰)와 같은 게이트: 룰에서 걸린 게 있어야 설명할 대상이 있으므로 위반·의심 0건이면 숨김.
+function Report2Link({
+  videoId,
+  summary
+}: {
+  videoId: string
+  summary: ScanSummary | null
+}) {
+  if (!summary || (summary.positive === 0 && summary.route === 0)) return null
+
+  const open = () => {
+    // kind:"ai" → background 가 report2.html 로 분기해 연다
+    const msg: OpenReportMessage = { type: "OPEN_REPORT", videoId, kind: "ai" }
+    void chrome.runtime.sendMessage(msg)
+  }
+
+  return (
+    <button
+      onClick={open}
+      style={styles.reportLink}
+      title="AI 동작 과정(토큰화·로짓·softmax 확률) 상세 보기">
+      📋 2차 AI 보고서 열기 ↗
     </button>
   )
 }
@@ -308,23 +412,28 @@ function SubtitlePanel({
   )
 }
 
-// ── 위반 패널: 위반·의심 줄만 모아 보여주는 독립 토글 (자막 패널 왼쪽 슬롯) ──
-//   entry 는 안 받는다 — 이 패널은 "분석 결과"만 다루므로 scanned/summary 면 충분
-//   왜 별도 패널: 자막 전체에서 문제 줄만 빠르게 훑을 수 있게, 자막 패널과 독립적으로 켜고 끔
+// ── 위법 패널: 이제 "AI 검증을 통과한" 위법 줄만 보여주는 독립 토글 (자막 패널 왼쪽 슬롯) ──
+//   왜 바뀌었나: 룰 엔진만으로는 위법 UI 를 띄우지 않고, AI(ai)까지 위법으로 확정한 줄만 표시한다.
+//   flagged: 룰이 거른 위반·의심 줄(검증 입력) / ai: 검증 결과 / summary·scanned: 1차(룰) 기준 도구(보고서·JSON)에만 사용
 function ViolationPanel({
-  scanned,
+  flagged,
+  ai,
   summary,
+  scanned,
   videoId
 }: {
-  scanned: ScannedLine[] | null
+  flagged: ScannedLine[]
+  ai: AiState
   summary: ScanSummary | null
+  scanned: ScannedLine[] | null
   videoId: string // 보고서 탭 URL(?v=) 키 — 어떤 영상의 근거를 펼칠지 식별
 }) {
   // 자막 패널과 별개의 open 상태 — 둘을 동시에 띄울 수 있어야 하므로 독립적으로 관리
   const [open, setOpen] = useState(false)
-  const dotColor = statusDot(summary)
+  // 토글/헤더 색은 AI 상태 기준 (검증 중=파랑, 위법 있음=빨강, 없음=초록)
+  const dotColor = aiDot(ai)
 
-  // 닫힌 상태: ⚠ 토글 (자막 토글과 색 규칙은 같고 위치 슬롯만 다름)
+  // 닫힌 상태: ⚠ 토글 (위치 슬롯만 다르고 색 규칙은 패널 헤더와 동일)
   if (!open) {
     return (
       <button
@@ -334,18 +443,18 @@ function ViolationPanel({
           right: SLOT_VIOLATION_RIGHT,
           background: dotColor
         }}
-        title={describeViolation(summary)}>
+        title={aiHeader(ai)}>
         ⚠
       </button>
     )
   }
 
-  // 열린 상태: 헤더(위반/의심 개수) + 위반·의심 줄만 필터링한 리스트
+  // 열린 상태: 헤더(AI 위법 개수) + AI 가 위법으로 확정한 줄 리스트
   return (
     <div style={{ ...styles.panel, right: SLOT_VIOLATION_RIGHT }}>
       <div style={styles.panelHeader}>
         <span style={{ ...styles.dot, background: dotColor }} />
-        <span style={styles.headerLabel}>{describeViolation(summary)}</span>
+        <span style={styles.headerLabel}>{aiHeader(ai)}</span>
         <button
           onClick={() => setOpen(false)}
           style={styles.closeBtn}
@@ -353,11 +462,82 @@ function ViolationPanel({
           ×
         </button>
       </div>
-      {/* 위반·의심 줄에 대한 액션 묶음: 보고서 진입 + AI 학습용 JSON 클립보드 복사
-            둘 다 위반·의심 0건일 때는 비활성/숨김 → 데이터 있는 경우만 노출 */}
+      {/* 진입 버튼들: 1차 룰 보고서 · 2차 AI 보고서(모델 동작) · 학습용 JSON(룰 기준) */}
       <ReportLink videoId={videoId} summary={summary} />
+      <Report2Link videoId={videoId} summary={summary} />
       <CopyDatasetButton scanned={scanned} />
-      <div style={styles.panelBody}>{renderViolationBody(scanned)}</div>
+      <div style={styles.panelBody}>{renderAiBody(ai, flagged)}</div>
+    </div>
+  )
+}
+
+// ── 진행 패널: 영상추출 → 룰엔진 → AI검증 3단계를 실시간으로 보여주는 독립 토글 ──
+//   왜 기본 펼침(open=true): "실시간 진행 표시"가 이 패널의 핵심 목적이라, 켜는 수고 없이 바로 보이게 한다.
+//   입력(entry/scanned/summary/ai)에서 파생만 하므로 자체 상태는 open 토글뿐
+function ProgressPanel({
+  entry,
+  scanned,
+  summary,
+  ai
+}: {
+  entry: StoredEntry | null
+  scanned: ScannedLine[] | null
+  summary: ScanSummary | null
+  ai: AiState
+}) {
+  const [open, setOpen] = useState(true)
+  // 세 단계 뷰로 변환 — 각 단계의 status(대기/진행/완료/실패)와 한 줄 설명
+  const stages = buildStages(entry, scanned, summary, ai)
+  // 닫힌 토글 색: 가장 우선되는 상태(실패>진행>완료>대기)로 전체 진행을 한 점으로 요약
+  const dotColor = overallColor(stages)
+
+  // 닫힌 상태: ⚙ 토글 (진행 색을 그대로 입혀 닫아둬도 흐름이 보이게)
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        style={{
+          ...styles.toggleClosed,
+          right: SLOT_PROGRESS_RIGHT,
+          background: dotColor
+        }}
+        title="실시간 분석 진행 상황">
+        ⚙
+      </button>
+    )
+  }
+
+  // 열린 상태: 헤더 + 단계 리스트 (단계마다 상태칩 + 이름 + 상세)
+  return (
+    <div style={{ ...styles.panel, right: SLOT_PROGRESS_RIGHT }}>
+      <div style={styles.panelHeader}>
+        <span style={{ ...styles.dot, background: dotColor }} />
+        <span style={styles.headerLabel}>실시간 분석 진행</span>
+        <button
+          onClick={() => setOpen(false)}
+          style={styles.closeBtn}
+          title="닫기">
+          ×
+        </button>
+      </div>
+      <div style={styles.panelBody}>
+        {/* 단계 N개 → 행 N개. 순서(추출→룰→AI)가 곧 파이프라인 순서라 인덱스로 번호를 붙인다 */}
+        {stages.map((s, i) => (
+          <div key={i} style={styles.stageRow}>
+            <span
+              style={{
+                ...styles.stageChip,
+                background: STAGE_STATUS_COLOR[s.status]
+              }}>
+              {STAGE_STATUS_LABEL[s.status]}
+            </span>
+            <div style={styles.stageMeta}>
+              <div style={styles.stageName}>{`${i + 1}. ${s.name}`}</div>
+              <div style={styles.stageDetail}>{s.detail}</div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -376,10 +556,83 @@ function describeState(
   return `${entry.data.segments.length}라인 추출됨`
 }
 
-// 위반 패널 헤더/툴팁 문구 — scanned 가 없으면 분석 전, 있으면 위반·의심 개수만 강조
-function describeViolation(summary: ScanSummary | null): string {
-  if (!summary) return "자막 분석 대기 중..."
-  return `위반 ${summary.positive} · 의심 ${summary.route}`
+// AI 상태 → 위법 토글/헤더 점 색. 검증 중=파랑, 위법 있음=빨강, 위법 없음/건너뜀=초록, 그 외=회색
+function aiDot(ai: AiState): string {
+  if (ai.phase === "running") return "#4a90e2"
+  if (ai.phase === "done")
+    return ai.verdicts.some((v) => v.isViolation) ? "#e5484d" : "#1f7a34"
+  if (ai.phase === "skip") return "#1f7a34"
+  return "#888" // idle / error — 헤더 텍스트로 상태를 구분
+}
+
+// AI 상태 → 위법 패널 헤더/툴팁 한 줄 문구
+function aiHeader(ai: AiState): string {
+  switch (ai.phase) {
+    case "idle":
+      return "AI 검증 대기 중…"
+    case "skip":
+      return "위반·의심 없음 — AI 검증 불필요"
+    case "running":
+      return `AI 검증 중… (${ai.total}문장)`
+    case "done": {
+      // verdicts 중 isViolation 만 세서 "AI 가 확정한 위법" 개수만 강조
+      const pos = ai.verdicts.filter((v) => v.isViolation).length
+      return `AI 위법 확정 ${pos}건`
+    }
+    case "error":
+      return "AI 검증 실패"
+  }
+}
+
+// AI 상태 + flagged → 위법 패널 본문. done 일 때만 위법 줄 리스트, 그 외엔 상태 안내 문구
+//   데이터 형태: flagged(룰이 거른 줄) 와 ai.verdicts 를 같은 인덱스로 zip → isViolation 인 줄만 남김
+function renderAiBody(ai: AiState, flagged: ScannedLine[]) {
+  if (ai.phase === "idle") {
+    return <p style={styles.muted}>자막 분석 후 AI 검증을 시작합니다.</p>
+  }
+  if (ai.phase === "running") {
+    return (
+      <p style={styles.muted}>
+        룰 엔진이 거른 {ai.total}문장을 AI 모델로 검증 중입니다…
+      </p>
+    )
+  }
+  if (ai.phase === "skip") {
+    return (
+      <p style={styles.muted}>
+        룰 엔진에서 위반·의심 신호가 없어 AI 검증을 건너뜁니다 ✅
+      </p>
+    )
+  }
+  if (ai.phase === "error") {
+    return (
+      <p style={styles.muted}>
+        AI 검증 실패: <code style={styles.code}>{ai.reason}</code>
+      </p>
+    )
+  }
+  // done — flagged 와 verdicts 는 검증 요청 시점의 같은 배열에서 나와 순서가 1:1 이므로 인덱스로 매핑
+  const pairs = flagged
+    .map((line, i) => ({ line, verdict: ai.verdicts[i] }))
+    .filter((p) => p.verdict?.isViolation)
+  if (pairs.length === 0) {
+    return <p style={styles.muted}>AI 검증 결과 위법 문장이 없습니다 ✅</p>
+  }
+  return (
+    <div>
+      {pairs.map(({ line, verdict }, i) => (
+        <div key={i} style={styles.segmentRow}>
+          <span style={styles.timestamp}>{formatTime(line.start)}</span>
+          <span style={{ ...styles.text, color: "#e5484d" }}>
+            {`[위법] `}
+            {line.text}
+            {/* 어떤 라벨로 몇 점에 걸렸는지 근거를 살짝 곁들임 (AI:라벨 점수) */}
+            <span style={styles.aiTag}>{` · AI:${verdict.label} ${verdict.score.toFixed(2)}`}</span>
+          </span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 // 자막 패널 본문 — 상태별로 다른 내용
@@ -432,39 +685,95 @@ function renderBody(entry: StoredEntry | null, scanned: ScannedLine[] | null) {
   )
 }
 
-// 위반 패널 본문 — 위반·의심 줄만 추려 (텍스트 + 태그만, 매칭 근거는 표시 안 함)
-//   데이터 형태: ScannedLine[] → status 가 Rule-Negative 가 아닌 줄만 남긴 부분집합
-function renderViolationBody(scanned: ScannedLine[] | null) {
-  // 아직 성공 자막이 아니어서 스캔 결과가 없는 경우 — 자막 패널 쪽에서 진행 상태 확인 유도
-  if (!scanned) {
-    return (
-      <p style={styles.muted}>
-        분석할 자막이 아직 없습니다. (자막 추출/전사 완료 후 표시됩니다)
-      </p>
-    )
+// ── 진행 패널용 단계 모델 ──
+//   파이프라인 상태를 화면에 그릴 3개의 단계로 환산하는 순수 변환 계층 (네트워크/부수효과 없음)
+type StageStatus = "idle" | "active" | "done" | "error"
+type Stage = { name: string; status: StageStatus; detail: string }
+
+// 단계 상태 → 칩 색/라벨. 대기=회색, 진행=파랑, 완료=초록, 실패=빨강
+const STAGE_STATUS_COLOR: Record<StageStatus, string> = {
+  idle: "#888",
+  active: "#4a90e2",
+  done: "#1f7a34",
+  error: "#e5484d"
+}
+const STAGE_STATUS_LABEL: Record<StageStatus, string> = {
+  idle: "대기",
+  active: "진행",
+  done: "완료",
+  error: "실패"
+}
+
+// (entry, scanned, summary, ai) → [영상추출, 룰엔진, AI검증] 3단계 뷰.
+//   각 단계는 앞 단계 결과를 원천으로 상태가 정해진다 (추출=storage, 룰=scanned, AI=ai 상태기계)
+function buildStages(
+  entry: StoredEntry | null,
+  scanned: ScannedLine[] | null,
+  summary: ScanSummary | null,
+  ai: AiState
+): Stage[] {
+  return [sttStage(entry), ruleStage(entry, scanned, summary), aiStageView(ai)]
+}
+
+// 1단계: 영상 추출(STT) — storage entry 가 진행 상태의 원천 (queued→downloading→transcribing→done/실패)
+function sttStage(entry: StoredEntry | null): Stage {
+  if (!entry) return { name: "영상 추출", status: "idle", detail: "대기 중" }
+  if (entry.ok === "pending")
+    return { name: "영상 추출", status: "active", detail: STAGE_LABEL[entry.data.stage] }
+  if (entry.ok === false)
+    return { name: "영상 추출", status: "error", detail: `실패: ${entry.data.reason}` }
+  return {
+    name: "영상 추출",
+    status: "done",
+    detail: `전사 완료 · ${entry.data.segments.length}줄`
   }
-  // 정상이 아닌 줄만 필터 — 위반 패널의 핵심 변환 지점
-  const flagged = scanned.filter((l) => l.status !== "Rule-Negative")
-  // 스캔은 끝났는데 걸린 줄이 0개면 "깨끗함"을 명시 (빈 화면이 버그처럼 보이지 않게)
-  if (flagged.length === 0) {
-    return <p style={styles.muted}>위반·의심 신호가 발견되지 않았습니다 ✅</p>
+}
+
+// 2단계: 룰 엔진 — STT 완료(entry.ok===true) 후에야 동기 스캔이 돌므로, 그 전엔 대기
+function ruleStage(
+  entry: StoredEntry | null,
+  scanned: ScannedLine[] | null,
+  summary: ScanSummary | null
+): Stage {
+  if (!entry || entry.ok !== true)
+    return { name: "룰 엔진", status: "idle", detail: "대기 중" }
+  if (!scanned || !summary)
+    return { name: "룰 엔진", status: "active", detail: "분석 중" }
+  return {
+    name: "룰 엔진",
+    status: "done",
+    detail: `위반 ${summary.positive} · 의심 ${summary.route} · 정상 ${summary.negative}`
   }
-  return (
-    <div>
-      {flagged.map((l, i) => {
-        const view = STATUS_VIEW[l.status]
-        return (
-          <div key={i} style={styles.segmentRow}>
-            <span style={styles.timestamp}>{formatTime(l.start)}</span>
-            <span style={{ ...styles.text, color: view.color }}>
-              {`[${view.tag}] `}
-              {l.text}
-            </span>
-          </div>
-        )
-      })}
-    </div>
-  )
+}
+
+// 3단계: AI 검증 — ai 상태 기계를 그대로 단계 뷰로 옮긴다
+function aiStageView(ai: AiState): Stage {
+  switch (ai.phase) {
+    case "idle":
+      return { name: "AI 검증", status: "idle", detail: "대기 중" }
+    case "skip":
+      return { name: "AI 검증", status: "done", detail: "검증 대상 없음 (위반·의심 0)" }
+    case "running":
+      return { name: "AI 검증", status: "active", detail: `검증 중… ${ai.total}문장` }
+    case "done": {
+      const pos = ai.verdicts.filter((v) => v.isViolation).length
+      return {
+        name: "AI 검증",
+        status: "done",
+        detail: `위법 확정 ${pos}건 / ${ai.verdicts.length}`
+      }
+    }
+    case "error":
+      return { name: "AI 검증", status: "error", detail: `실패: ${ai.reason}` }
+  }
+}
+
+// 3단계 중 가장 우선되는 상태로 닫힌 토글 한 점의 색을 정함 (실패>진행>모두완료>대기)
+function overallColor(stages: Stage[]): string {
+  if (stages.some((s) => s.status === "error")) return "#e5484d"
+  if (stages.some((s) => s.status === "active")) return "#4a90e2"
+  if (stages.every((s) => s.status === "done")) return "#1f7a34"
+  return "#888"
 }
 
 // 인라인 스타일 모음 — Plasmo CSUI 가 shadow DOM 으로 격리하지만 명시적으로 적어둠
@@ -585,7 +894,31 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
     color: "#ddd",
     fontSize: 11
-  }
+  },
+  // 진행 패널: 단계 한 행 — 좌측 상태칩 + 우측 이름/상세
+  stageRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: "8px 0",
+    borderBottom: "1px solid rgba(255,255,255,0.05)"
+  },
+  stageChip: {
+    flexShrink: 0,
+    minWidth: 34,
+    textAlign: "center",
+    color: "white",
+    fontSize: 11,
+    fontWeight: 700,
+    padding: "2px 6px",
+    borderRadius: 4,
+    lineHeight: 1.5
+  },
+  stageMeta: { flex: 1, minWidth: 0 },
+  stageName: { fontWeight: 600, fontSize: 12, lineHeight: 1.4 },
+  stageDetail: { color: "#aaa", fontSize: 11, lineHeight: 1.5, marginTop: 2 },
+  // 위법 줄 끝에 붙는 AI 근거 태그 (라벨·점수) — 본문보다 옅게
+  aiTag: { color: "#ff8a8d", fontSize: 11, opacity: 0.85 }
 }
 
 export default Overlay
