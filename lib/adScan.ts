@@ -119,14 +119,6 @@ export function scanCaptions(
   return lines;
 }
 
-// ScannedLine[] → 걸린 줄(위반·의심)만 추림. 형식은 ScannedLine 그대로 유지(근거 보존)가 buildDataset 과 다른 점.
-//   왜 필요: 외부(팀원)에 "rule 출력 형식 그대로 + 걸린 줄만" 을 줄 때 사용. 정상 줄까지 주면 영상이 길수록 JSON 이 비대해진다.
-//   왜 buildDataset 를 안 쓰는지: 그쪽은 {text,status} 로 깎아내 근거(ruleAnalysis/triggerAnalysis)가 사라진다.
-export function pickFlagged(lines: ScannedLine[]): ScannedLine[] {
-  // Rule-Negative(정상) 만 제외 — 나머지(Rule-Positive/Route-to-Model)는 형식 그대로 통과
-  return lines.filter((l) => l.status !== 'Rule-Negative');
-}
-
 // ScannedLine[] → 상태별 카운트. 한 번 순회하며 분류 누적
 export function summarize(lines: ScannedLine[]): ScanSummary {
   const s: ScanSummary = { positive: 0, route: 0, negative: 0 };
