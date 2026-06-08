@@ -8,3 +8,6 @@ out/
 .DS_Store
 .vscode/
 .idea/
+# 로컬 추론 서버(infer/)의 파이썬 가상환경·캐시 — 수백 MB라 커밋 금지
+.venv/
+__pycache__/

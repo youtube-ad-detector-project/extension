@@ -104,6 +104,9 @@ function Report() {
         · 위반 {positive} · 의심 {route}
       </p>
 
+      {/* AI 학습 JSON 복사 액션은 영상 오버레이의 ViolationPanel(⚠) 로 이동됨 —
+            영상 보면서 바로 노션에 붙여넣을 수 있게 하기 위함이라, 여기 보고서 화면엔 더 이상 두지 않는다 */}
+
       {flagged.length === 0 ? (
         <p style={styles.meta}>위반·의심 신호가 발견되지 않았습니다 ✅</p>
       ) : (

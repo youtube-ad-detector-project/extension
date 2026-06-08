@@ -1,0 +1,6 @@
+# 로컬 추론 서버 의존성 (학습용 최소)
+#   fastapi/uvicorn: HTTP 껍데기 · transformers: 모델 아키텍처+로딩 · torch: 실제 연산 백엔드
+fastapi
+uvicorn[standard]
+transformers
+torch

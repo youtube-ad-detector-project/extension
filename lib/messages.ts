@@ -43,11 +43,48 @@ export type RequestSttMessage = {
   videoId: string
 }
 
-// overlay 가 "상세 위반 보고서 탭 열어줘" 라고 background 에 요청 (콘텐츠 스크립트엔 chrome.tabs 없음)
+// overlay 가 "상세 보고서 탭 열어줘" 라고 background 에 요청 (콘텐츠 스크립트엔 chrome.tabs 없음)
+//   kind: rule=1차(룰 근거, report.html) · ai=2차(AI 동작 과정, report2.html). 기본은 rule.
 export type OpenReportMessage = {
   type: "OPEN_REPORT"
   videoId: string
+  kind?: "rule" | "ai"
 }
 
-// background.onMessage 가 받는 메시지 합집합 — 두 종류뿐
-export type RuntimeMessage = RequestSttMessage | OpenReportMessage
+// 2차 보고서(report2.tsx)가 /api/explain 에서 받는 한 문장의 모델 내부 동작 — 서버 ExplainItem 과 같은 모양
+export type AiExplainItem = {
+  text: string
+  tokens: string[] // 모델이 본 토큰들(디코딩된 한글)
+  logits: Record<string, number> // softmax 전 원시 점수 {안전, 의심}
+  probs: Record<string, number> // softmax 후 확률
+  label: string
+  score: number
+  isViolation: boolean
+}
+
+// AI 2차 검증 요청 — 오버레이가 룰 엔진에서 걸린(위반·의심) 문장 배열을 background 에 넘긴다.
+//   왜 background 경유: 콘텐츠 스크립트의 cross-origin fetch 는 CORS 에 막히지만 service worker 는
+//   host_permissions(localhost:3000)로 서버를 직접 부를 수 있어, background 가 /api/classify 로 프록시한다.
+export type ClassifyRequestMessage = {
+  type: "CLASSIFY"
+  texts: string[]
+}
+
+// 문장 1개에 대한 AI 판정 — 서버 Verdict 와 같은 모양 (label/score + 위법 여부)
+export type ClassifyVerdict = {
+  text: string
+  label: string
+  score: number
+  isViolation: boolean
+}
+
+// CLASSIFY 응답(요청/응답 메시지) — 성공 시 verdicts(입력과 1:1 순서), 실패 시 reason
+export type ClassifyResponse =
+  | { ok: true; verdicts: ClassifyVerdict[] }
+  | { ok: false; reason: string }
+
+// background.onMessage 가 받는 메시지 합집합 — STT 트리거 / 보고서 열기 / AI 검증 세 종류
+export type RuntimeMessage =
+  | RequestSttMessage
+  | OpenReportMessage
+  | ClassifyRequestMessage
