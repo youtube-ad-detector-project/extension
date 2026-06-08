@@ -318,6 +318,33 @@ function Report2Link({
   )
 }
 
+// 최종 종합 보고서 진입 링크 — 클릭 시 background 가 report3.html(점수·법령·AI 합친 종합 결론) 탭을 연다.
+//   다른 보고서 링크와 같은 게이트: 위반·의심 0건이면 종합할 대상이 없으므로 숨김.
+function Report3Link({
+  videoId,
+  summary
+}: {
+  videoId: string
+  summary: ScanSummary | null
+}) {
+  if (!summary || (summary.positive === 0 && summary.route === 0)) return null
+
+  const open = () => {
+    // kind:"final" → background 가 report3.html 로 분기해 연다
+    const msg: OpenReportMessage = { type: "OPEN_REPORT", videoId, kind: "final" }
+    void chrome.runtime.sendMessage(msg)
+  }
+
+  return (
+    <button
+      onClick={open}
+      style={styles.reportLink}
+      title="위험도 점수·법령 근거·AI 판정을 합친 최종 종합 보고서 열기">
+      🧾 최종 종합 보고서 열기 ↗
+    </button>
+  )
+}
+
 // JSON 복사 버튼 — 위반·의심 줄(scanned 중 Rule-Negative 제외) 을 {text, status} JSON 으로 클립보드 복사.
 //   왜 오버레이로 이동: 보고서 탭에서 굳이 한 번 더 클릭할 필요 없이, 영상 보면서 바로 노션에 붙여넣을 수 있게.
 //   무엇이 들어가 → 처리 → 무엇이 반환:
@@ -462,9 +489,10 @@ function ViolationPanel({
           ×
         </button>
       </div>
-      {/* 진입 버튼들: 1차 룰 보고서 · 2차 AI 보고서(모델 동작) · 학습용 JSON(룰 기준) */}
+      {/* 진입 버튼들: 1차 룰 · 2차 AI 동작 · 최종 종합 · 학습용 JSON(룰 기준) */}
       <ReportLink videoId={videoId} summary={summary} />
       <Report2Link videoId={videoId} summary={summary} />
+      <Report3Link videoId={videoId} summary={summary} />
       <CopyDatasetButton scanned={scanned} />
       <div style={styles.panelBody}>{renderAiBody(ai, flagged)}</div>
     </div>

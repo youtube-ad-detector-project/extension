@@ -32,6 +32,18 @@ export type ScanSummary = {
   negative: number; // Rule-Negative (정상)
 };
 
+// 영상 1편 단위 위험도 요약 — 보고서 상단에 "이 영상 위험도 N점/등급" 한 줄로 쓰기 위함
+export type VideoRisk = {
+  riskScore: number;
+  riskGrade: '높음' | '중간' | '낮음' | '표시 없음';
+  riskLevelText: string;
+  riskSource: 'max_sentence_risk_with_count_bonus' | 'none';
+  suspiciousSentenceCount: number;
+  maxSentenceRiskPercent: number;
+  countBonus: number;
+  calculationNote: string;
+};
+
 // 전체 자막에서 영상 단위 제품명을 1회 탐색한다.
 // 왜 findRegisteredHealthFoodInSentence 를 직접 호출하는지: analyzeSentence 를 쓰면 줄마다 룰/예외/트리거 매칭까지 같이 돌아
 //   메인 루프와 합쳐 자막당 분석이 2회씩 실행되므로, 이름 탐색만 하는 가벼운 함수로 분리해 1차 패스 비용을 정규식 1회로 줄인다.
@@ -119,14 +131,6 @@ export function scanCaptions(
   return lines;
 }
 
-// ScannedLine[] → 걸린 줄(위반·의심)만 추림. 형식은 ScannedLine 그대로 유지(근거 보존)가 buildDataset 과 다른 점.
-//   왜 필요: 외부(팀원)에 "rule 출력 형식 그대로 + 걸린 줄만" 을 줄 때 사용. 정상 줄까지 주면 영상이 길수록 JSON 이 비대해진다.
-//   왜 buildDataset 를 안 쓰는지: 그쪽은 {text,status} 로 깎아내 근거(ruleAnalysis/triggerAnalysis)가 사라진다.
-export function pickFlagged(lines: ScannedLine[]): ScannedLine[] {
-  // Rule-Negative(정상) 만 제외 — 나머지(Rule-Positive/Route-to-Model)는 형식 그대로 통과
-  return lines.filter((l) => l.status !== 'Rule-Negative');
-}
-
 // ScannedLine[] → 상태별 카운트. 한 번 순회하며 분류 누적
 export function summarize(lines: ScannedLine[]): ScanSummary {
   const s: ScanSummary = { positive: 0, route: 0, negative: 0 };
@@ -139,4 +143,60 @@ export function summarize(lines: ScannedLine[]): ScanSummary {
   }
 
   return s;
+}
+
+// 문장별 sentenceRisk 를 영상 1편 단위 점수로 합산한다 (보고서 상단 요약용).
+//   무엇이 들어가 → 처리 → 무엇이 반환: ScannedLine[] → (최대 문장위험 + 의심문장 수 보너스) → VideoRisk
+//   ⚠️ 아직 호출부를 배선하지 않음 — 화면 노출은 다음 단계(보고서 연결)에서 진행.
+export function calculateVideoRisk(lines: ScannedLine[]): VideoRisk {
+  // 각 줄의 문장 위험도(0~1). 새 엔진의 sentenceRisk 가 없으면 0 으로 간주
+  const risks = lines.map((line) => line.result.sentenceRisk?.riskScore ?? 0);
+  const sMax = Math.max(...risks, 0);
+  const suspiciousSentenceCount = risks.filter((risk) => risk > 0).length;
+
+  // 의심 문장이 하나도 없으면 "표시 없음" 으로 단락 (점수/등급 계산 불필요)
+  if (suspiciousSentenceCount === 0) {
+    return {
+      riskScore: 0,
+      riskGrade: '표시 없음',
+      riskLevelText: '현재 탐지 기준상 뚜렷한 의심 신호 없음',
+      riskSource: 'none',
+      suspiciousSentenceCount: 0,
+      maxSentenceRiskPercent: 0,
+      countBonus: 0,
+      calculationNote:
+        '현재 탐지 기준상 뚜렷한 위법 의심 신호가 감지되지 않았습니다.',
+    };
+  }
+
+  // 의심 문장이 많을수록 가산점(최대 15) — 한 문장만 위험한 경우와 여러 문장이 위험한 경우를 구분
+  const countBonus = Math.min(15, suspiciousSentenceCount * 5);
+  const riskScore = Math.min(100, Math.round(sMax * 100 + countBonus));
+
+  let riskGrade: VideoRisk['riskGrade'];
+  let riskLevelText: string;
+
+  // 점수 구간별 등급 — 화면 색/문구를 다르게 보여주기 위한 분기
+  if (riskScore >= 70) {
+    riskGrade = '높음';
+    riskLevelText = '위법 의심 신호 높음';
+  } else if (riskScore >= 40) {
+    riskGrade = '중간';
+    riskLevelText = '일부 위법 의심 신호 감지';
+  } else {
+    riskGrade = '낮음';
+    riskLevelText = '약한 의심 신호 감지';
+  }
+
+  return {
+    riskScore,
+    riskGrade,
+    riskLevelText,
+    riskSource: 'max_sentence_risk_with_count_bonus',
+    suspiciousSentenceCount,
+    maxSentenceRiskPercent: Math.round(sMax * 100),
+    countBonus,
+    calculationNote:
+      '위험도 점수는 실제 위법 확률이 아니라 Rule 탐지, 모델 신뢰도, 표현 유형 심각도를 종합한 자동 탐지 기준 점수입니다.',
+  };
 }

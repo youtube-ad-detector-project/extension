@@ -57,9 +57,14 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender, sendResponse)
 
 // videoId → 확장 내부 보고서 탭 1개 생성 (side-effect 만).
 //   getURL: tabs/report*.tsx 가 Plasmo 빌드 시 tabs/report*.html 로 떨어지며 확장 절대 URL 로 변환됨
-//   kind: rule→report.html(1차 룰 근거) · ai→report2.html(2차 AI 동작). ?v= 로 어떤 영상인지 전달.
-function openReport(videoId: string, kind: "rule" | "ai"): void {
-  const page = kind === "ai" ? "tabs/report2.html" : "tabs/report.html"
+//   kind: rule→report.html(1차 룰 근거) · ai→report2.html(2차 AI 동작) · final→report3.html(최종 종합). ?v= 로 어떤 영상인지 전달.
+function openReport(videoId: string, kind: "rule" | "ai" | "final"): void {
+  const page =
+    kind === "ai"
+      ? "tabs/report2.html"
+      : kind === "final"
+        ? "tabs/report3.html"
+        : "tabs/report.html"
   const url = chrome.runtime.getURL(`${page}?v=${encodeURIComponent(videoId)}`)
   console.log(TAG, `📄 보고서 탭 열기: 영상=${videoId}, 종류=${kind}, url=${url}`)
   void chrome.tabs.create({ url })

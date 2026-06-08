@@ -1,8 +1,8 @@
 {
-  "version": "1.1-train",
+  "version": "1.1",
   "weight_by_strength": {
-    "상": 2.0,
-    "중": 1.0,
+    "상": 2,
+    "중": 1,
     "하": 0.5
   },
   "categories": [
@@ -47,7 +47,19 @@
           "regex": "(?:검사.{0,3}결과)",
           "rationale": "맥락 의존도가 높아 단독으로는 약한 신호. 다른 트리거와 동시 등장 시에만 의미"
         }
-      ]
+      ],
+      "candidateLawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_1",
+        "FOOD_LABEL_AD_ACT_ART8_1_2",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_1_A",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_1_B",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_1_C",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_2_C"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "id": "T2",
@@ -77,18 +89,10 @@
             "혈행에 좋은",
             "면역에 좋은",
             "장에 좋은",
-            "눈에 좋은",
-            "관절이 편",
-            "눈이 편",
-            "장이 편",
-            "혈당 관리",
-            "혈압 관리",
-            "콜레스테롤 관리",
-            "화장실이 편",
-            "붓기가 빠"
+            "눈에 좋은"
           ],
-          "regex": "(?:잠이.{0,3}안.{0,3}오|무릎이.{0,3}시린|신경.{0,3}쓰이는|혈행에.{0,3}좋은|면역에.{0,3}좋은|장에.{0,3}좋은|눈에.{0,3}좋은|깜빡깜빡|쑤시는|침침한|관절이.{0,3}편|눈이.{0,3}편|장이.{0,3}편|혈당.{0,3}관리|혈압.{0,3}관리|콜레스테롤.{0,3}관리|화장실이.{0,3}편|붓기가.{0,3}빠)",
-          "rationale": "룰 1.2A의 (질환자+연관표현), 1.4B의 (기능속성+효능행위)에서 키워드 없이 증상·기능 묘사 학습 후보 수집용으로 기능 개선을 우회적으로 암시하는 구어체 표현을 보강."
+          "regex": "(?:잠이.{0,3}안.{0,3}오|무릎이.{0,3}시린|신경.{0,3}쓰이는|혈행에.{0,3}좋은|면역에.{0,3}좋은|장에.{0,3}좋은|눈에.{0,3}좋은|깜빡깜빡|쑤시는|침침한)",
+          "rationale": "룰 1.2A의 (질환자+연관표현), 1.4B의 (기능속성+효능행위)에서 키워드 없이 증상·기능 묘사"
         },
         {
           "level": "하",
@@ -104,7 +108,19 @@
           "regex": "(?:가벼워졌|멀쩡해|달라졌|활력이|순환이|흡수가|대사가)",
           "rationale": "단독으로는 일반 영상에도 등장 가능. 카운트 누적용"
         }
-      ]
+      ],
+      "candidateLawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_1",
+        "FOOD_LABEL_AD_ACT_ART8_1_3",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_1_C",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_1_D",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_3",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_4_D"
+      ],
+      "safeHarborLawKeys": ["MFDS_NOTICE_2024_62_FUNCTIONAL_LABEL_AD_ALLOWED"]
     },
     {
       "id": "T3",
@@ -141,7 +157,15 @@
           "regex": "(?:연구소|의료원|연구원)",
           "rationale": "정상 원료 설명·기관 소개에서도 빈번. 단독으로는 약한 신호"
         }
-      ]
+      ],
+      "candidateLawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_5",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_5_D"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "id": "T4",
@@ -164,18 +188,9 @@
         },
         {
           "level": "중",
-          "keywords": [
-            "드시고 나서",
-            "꾸준히 드신",
-            "제가 챙겨 먹",
-            "제가 먹는",
-            "부모님 드리",
-            "주변에서 좋다",
-            "먹어본 사람",
-            "재구매"
-          ],
-          "regex": "(?:드시고.{0,3}나서|꾸준히.{0,3}드신|제가.{0,3}챙겨.{0,3}먹|제가.{0,3}먹는|부모님.{0,3}드리|주변에서.{0,3}좋다|먹어본.{0,3}사람|재구매)",
-          "rationale": "시간 표지로 후기 효과 암시 학습 후보 수집용으로 1인칭·가족·주변인 경험담 형태의 구어체 후기 표현을 보강."
+          "keywords": ["드시고 나서", "꾸준히 드신"],
+          "regex": "(?:드시고.{0,3}나서|꾸준히.{0,3}드신)",
+          "rationale": "시간 표지로 후기 효과 암시"
         },
         {
           "level": "하",
@@ -183,7 +198,15 @@
           "regex": "(?:한.{0,3}달째|먹은.{0,3}지|섭취.{0,3}후|복용.{0,3}후)",
           "rationale": "정상 섭취 안내 영상에도 등장. 다른 트리거와 동시 등장 시에만 의미"
         }
-      ]
+      ],
+      "candidateLawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_5",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_5_C"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "id": "T5",
@@ -204,24 +227,20 @@
           "rationale": "룰 2.1B의 (기간+극단결과)에서 결과 키워드 없이 시간 표현 단독"
         },
         {
-          "level": "중",
-          "keywords": [
-            "먹자마자",
-            "며칠 먹고",
-            "일주일 안에",
-            "바로 느껴",
-            "금방 느껴"
-          ],
-          "regex": "(?:먹자마자|며칠.{0,3}먹고|일주일.{0,3}안에|바로.{0,3}느껴|금방.{0,3}느껴)",
-          "rationale": "극단적 결과 표현 없이도 단기간 체감 효과를 암시하는 표현. 학습 후보 수집용 보강."
-        },
-        {
           "level": "하",
           "keywords": ["금방", "바로", "오래 걸리지 않", "체감", "느껴져"],
           "regex": "(?:오래.{0,3}걸리지.{0,3}않|느껴져|금방|바로|체감)",
           "rationale": "일상 표현이라 단독 매칭 시 과탐 위험. 카운트 누적용"
         }
-      ]
+      ],
+      "candidateLawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_4",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_4_D"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "id": "T6",
@@ -238,16 +257,10 @@
             "피곤이 풀",
             "피로가 싹",
             "몸이 가벼",
-            "컨디션이 달라",
-            "덜 피곤",
-            "잠이 편",
-            "소화가 편",
-            "아침이 가벼",
-            "컨디션 올라",
-            "몸이 달라"
+            "컨디션이 달라"
           ],
-          "regex": "(?:컨디션이.{0,3}달라|머리가.{0,3}개운|속이.{0,3}편해|속이.{0,3}시원|머리가.{0,3}맑|피곤이.{0,3}가|피곤이.{0,3}풀|피로가.{0,3}싹|몸이.{0,3}가벼|덜.{0,3}피곤|잠이.{0,3}편|소화가.{0,3}편|아침이.{0,3}가벼|컨디션.{0,3}올라|몸이.{0,3}달라)",
-          "rationale": "룰 2.1A의 (신체조직+효능표현)에서 신체조직 키워드 없이 일상어로 컨디션 변화 묘사 학습 후보 수집용으로 질병명 없이 일상적 컨디션 개선을 암시하는 표현을 보강."
+          "regex": "(?:컨디션이.{0,3}달라|머리가.{0,3}개운|속이.{0,3}편해|속이.{0,3}시원|머리가.{0,3}맑|피곤이.{0,3}가|피곤이.{0,3}풀|피로가.{0,3}싹|몸이.{0,3}가벼)",
+          "rationale": "룰 2.1A의 (신체조직+효능표현)에서 신체조직 키워드 없이 일상어로 컨디션 변화 묘사"
         },
         {
           "level": "하",
@@ -255,7 +268,15 @@
           "regex": "(?:하루가.{0,3}다르|개운)",
           "rationale": "일반 컨디션 표현. 카운트 누적용 약한 신호"
         }
-      ]
+      ],
+      "candidateLawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_4",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_4_D"
+      ],
+      "safeHarborLawKeys": ["MFDS_NOTICE_2024_62_FUNCTIONAL_LABEL_AD_ALLOWED"]
     },
     {
       "id": "T7",
@@ -279,7 +300,16 @@
           "regex": "(?:일반적인.{0,3}거랑은|보통이랑은|오리지널)",
           "rationale": "광고 일반 어휘에 가까움. 카운트 누적용"
         }
-      ]
+      ],
+      "candidateLawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_7",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_7_A",
+        "MFDS_NOTICE_2025_79_ART2_4_B"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "id": "T8",
@@ -318,7 +348,17 @@
           "regex": "(?:세포.{0,3}단위|분자.{0,3}단위)",
           "rationale": "정상 과학 설명에서도 빈번. 단독으로는 약한 신호"
         }
-      ]
+      ],
+      "candidateLawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_4",
+        "FOOD_LABEL_AD_ACT_ART8_1_5",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_5_CHA",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_4_D"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "id": "T9",
@@ -348,7 +388,15 @@
           "regex": "(?:나이.{0,3}드신.{0,3}분|공부하는.{0,3}학생|애.{0,3}키우는|중년.{0,3}분|챙기는)",
           "rationale": "대상자 호칭 우회. 정상 영상에서도 등장 가능, 카운트 누적용"
         }
-      ]
+      ],
+      "candidateLawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_3",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_3"
+      ],
+      "safeHarborLawKeys": ["MFDS_NOTICE_2024_62_FUNCTIONAL_LABEL_AD_ALLOWED"]
     }
   ]
 }

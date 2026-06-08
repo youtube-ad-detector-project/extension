@@ -6,220 +6,419 @@
       "sub_category": "A. 질병/증상 예방·치료형",
       "combination": "(질병·증상 + 예방/치료표현)",
       "regex": "(?=.*(?:심혈관\\s*질환|알츠하이머|만성\\s*피로|전립선\\s*암|골다공증|동맥\\s*경화|수면\\s*장애|소화\\s*불량|어지럼증|이석증|폐\\s*질환|코로나\\s*19|우한\\s*폐렴|류마티스|관절염|피부염|지방간|유방암|관절통|재채기|아토피|불면증|우울감|고혈압|건망증|간\\s*질환|대장암|가려움|인후통|코로나|목\\s*통증|기침|발열|설사|부종|폐암|복통|위염|질염|염증|변비|치매|위암|오한|장염|독감|콧물|피로|당뇨|두통|습진|붓기|가래|암))(?=.*(?:정상화|예방|방지|차단|억제|치료|완치|개선|완화|회복|조절|경감|감소|해소|말끔|효과))",
-      "weight": 10.0,
+      "weight": 10,
       "is_exception": false,
       "rationale": "직접적인 질병 예방·치료 주장으로 규제 핵심 금지영역에 해당하며 소비자 위해성과 집행 리스크가 가장 높음",
-      "legal_reference": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고를 금지한다 : 단 건강기능식품이 기능성을 인정받은 사항을 표시ㆍ광고하는 경우, 예외적으로 허용한다."
+      "legal_reference": "1. 질병의 예방ㆍ치료에 효능이 있는 것으로 인식할 우려가 있는 표시 또는 광고를 금지한다 : 단 건강기능식품이 기능성을 인정받은 사항을 표시ㆍ광고하는 경우, 예외적으로 허용한다.",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_1",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_1_A",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_1_B",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_1_C"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "1.1 질병(증상) 예방 치료",
       "sub_category": "B. 항(抗) 효과형",
       "combination": "(항표현 + 질병 + 효과표현)",
       "regex": "(?=.*(?:항\\s*(?:바이러스|고\\s*혈압|당뇨|염증|균|암|염).{0,8}(?:효과|효능|작용|기능)))",
-      "weight": 10.0,
+      "weight": 10,
       "is_exception": false,
       "rationale": "항암·항균 등 항(抗) 표현은 질병 치료효과 암시가 강해 직접 금지영역에 준하는 고위험 신호",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_1",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_1_B"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "1.2 질병과 연관성 표현",
       "sub_category": "A. 질병 연관성 표현형",
       "combination": "(질병·질환자 + 연관표현)",
       "regex": "(?=.*(?:심혈관\\s*질환|알츠하이머|만성\\s*피로|전립선\\s*암|골다공증|동맥\\s*경화|수면\\s*장애|소화\\s*불량|어지럼증|이석증|폐\\s*질환|코로나\\s*19|우한\\s*폐렴|류마티스|관절염|피부염|지방간|유방암|관절통|재채기|아토피|불면증|우울감|고혈압|건망증|간\\s*질환|대장암|가려움|인후통|코로나|목\\s*통증|기침|발열|설사|부종|폐암|복통|위염|질염|염증|변비|치매|위암|오한|장염|독감|콧물|피로|당뇨|두통|습진|붓기|가래|암|환자|질환자))(?=.*(?:프로그램|솔루션|밸런스|서포트|관리|케어|맞춤|전용|위한|도움))",
-      "weight": 10.0,
+      "weight": 10,
       "is_exception": false,
       "rationale": "질병과 제품의 직접 연계는 치료 주장보다 약하지만 소비자 오해 유발 위험이 높아 고위험으로 평가",
-      "legal_reference": "1. 질병과 연관성 통해 예방, 치료에 효능 있는 것으로 인식할 우려 있는 광고를 금지한다 : 단 건강기능식품이 인정 받은 기능성으로 질병의 발생 위험을 감소시키는 데 도움이 된다는 표시 광고는 예외적으로 허용한다"
+      "legal_reference": "1. 질병과 연관성 통해 예방, 치료에 효능 있는 것으로 인식할 우려 있는 광고를 금지한다 : 단 건강기능식품이 인정 받은 기능성으로 질병의 발생 위험을 감소시키는 데 도움이 된다는 표시 광고는 예외적으로 허용한다",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_1",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_1_D"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "1.3 의약품과 연관성 표현",
       "sub_category": "A. 의약품 유사명칭형",
       "combination": "(의약품명칭)",
       "regex": "(?:천연\\s*수면\\s*유도제|먹는\\s*탈모\\s*약|혈행\\s*개선제|식욕\\s*억제제|소염\\s*진통제|간\\s*보호\\s*제|간\\s*강화\\s*유도제|소염\\s*제|소화\\s*제|감기\\s*약|무좀\\s*약|변비\\s*약|멀미\\s*약|피로\\s*회복제|항생\\s*제|항암\\s*제|항염\\s*제|항고혈압\\s*제|당뇨\\s*약|고혈압\\s*약|탈모\\s*약|이뇨\\s*제|수면\\s*제|위장\\s*약|강장\\s*제|진통\\s*제|해열\\s*제|소독\\s*제|만역\\s*제|치료\\s*제|병원\\s*약|처방\\s*약|습진\\s*약|위산\\s*제)",
-      "weight": 10.0,
+      "weight": 10,
       "is_exception": false,
       "rationale": "의약품 명칭 사용 자체가 의약품 오인 위험이 높고 위반 판단 가능성이 매우 높음",
-      "legal_reference": "2. 식품등을 의약품으로 인식할 우려가 있는 표시 또는 광고를 금지한다"
+      "legal_reference": "2. 식품등을 의약품으로 인식할 우려가 있는 표시 또는 광고를 금지한다",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_2",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_2_A"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "1.3 의약품과 연관성 표현",
       "sub_category": "B. 한약처방 조합형",
       "combination": "(한약처방어근 + 한약제형명)",
       "regex": "(?:녹용\\s*대보|팔미\\s*지황|생맥|천대보|육미\\s*지황|공진|경옥|사향|쌍화|십전\\s*대보|보익|귀비|전대보|청폐|삼진|교비|대보|보간|명작|건비|청심|생장|공살|경옥고|선전대보|녹용대보|총명|가미\\s*보양|루이\\s*사향|골미\\s*사향)\\s*(?:탕|환|고|산|전|단|차|액|즙|진액|수환|밀환|농축|농축액|정|캡슐)",
-      "weight": 10.0,
+      "weight": 10,
       "is_exception": false,
       "rationale": "한약 처방명과 제형 조합은 고시 직접 규제 영역으로 강한 위반 의심 신호",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_2",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_2_A"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "1.3 의약품과 연관성 표현",
       "sub_category": "C. 의약품 대체형",
       "combination": "(의약품관련어 + 대체표현)",
-      "regex": "(?=.*(?:복용\\s*약|치료\\s*제|처방\\s*약|의약\\s*품|약\\s*물|병원|주사|시술|피부과|비만\\s*클리닉|약))(?=.*(?:필요\\s*없는|필요\\s*없|안\\s*먹어도|안\\s*먹|끊게|대신|대체|대체품|끊어|끊는|벗어나|약\\s*보다\\s*빠른|약\\s*보다\\s*빠름|보다\\s*나은|갈\\s*필요\\s*없음|맞을\\s*필요\\s*없음|없이|안\\s*맞아도|안\\s*맞))",
-      "weight": 10.0,
+      "regex": "(?=.*(?:복용\\s*약|치료\\s*제|처방\\s*약|의약\\s*품|약\\s*물|약|병원|주사|시술|피부과|비만\\s*클리닉))(?=.*(?:필요\\s*없는|필요\\s*없|안\\s*먹어도|안\\s*먹|안\\s*맞아도|안\\s*맞|끊게|대신|대체|대체품|끊어|끊는|벗어나|약\\s*보다\\s*빠(?:른|름)|보다\\s*나은|갈\\s*필요\\s*없음|맞을\\s*필요\\s*없음|없이))",
+      "weight": 10,
       "is_exception": false,
       "rationale": "의약품 대체 주장은 소비자 위해성과 규제 리스크 모두 매우 높아 최고위험",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_2",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_2_C"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "1.3 의약품과 연관성 표현",
       "sub_category": "D. 약효 증대형",
       "combination": "(의약품관련어 + 증대표현)",
       "regex": "(?=.*(?:복용\\s*약|치료\\s*제|처방\\s*약|의약\\s*품|약\\s*물|약))(?=.*(?:상승\\s*시켜|상승|증대|증진|강화|높이는|높여\\s*주는|효과\\s*증가|배가|더\\s*좋아지는|효능\\s*강화))",
-      "weight": 10.0,
+      "weight": 10,
       "is_exception": false,
       "rationale": "약효 증대 주장은 치료효과 직접 증폭 주장으로 직접 금지영역에 해당",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_2",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_2_D"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "1.4 건강기능식품으로 오인 가능성",
       "sub_category": "A. 건강기능식품 직접 표방형",
       "combination": "(건기식 오인표현 단독)",
       "regex": "(?:건강\\s*기능\\s*식품|건기식|기능성\\s*식품|기능성\\s*표시|기능성\\s*인증|기능성\\s*인정|기능성\\s*원료|건강\\s*기능\\s*식품\\s*인증|건강\\s*기능\\s*식품\\s*수준|건강\\s*기능\\s*식품\\s*원료|건강\\s*기능\\s*식품\\s*마크|식약처\\s*인정|식약처\\s*인증|기능성\\s*인증\\s*원료|기능성\\s*표시\\s*제품)",
-      "weight": 6.0,
+      "weight": 6,
       "is_exception": false,
-      "rationale": "건강기능식품 직접 표방은 오인 위험이 있으나 제품 DB 검증 가능성을 감안해 최고위험보다 한 단계 낮춤",
-      "legal_reference": "3. 건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고를 금지한다"
+      "rationale": "건강기능식품 직접 표방은 제품 DB 확인이 필요하고 단독 표현의 오탐 가능성이 있어 중위험으로 평가",
+      "legal_reference": "3. 건강기능식품이 아닌 것을 건강기능식품으로 인식할 우려가 있는 표시 또는 광고를 금지한다",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_3",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_3"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "1.4 건강기능식품으로 오인 가능성",
       "sub_category": "B. 기능성 효능 표방형",
       "combination": "(기능속성 + 효능행위)",
       "regex": "(?=.*(?:면역\\s*시스템|면역\\s*기능|면역\\s*체계|혈액\\s*순환|혈행\\s*순환|배변\\s*활동|기억\\s*력|체지방|장\\s*건강|장\\s*기능|간\\s*건강|간\\s*기능|눈\\s*건강|피로\\s*개선|관절\\s*건강|피부\\s*건강|수면\\s*건강|스트레스|긴장\\s*감|혈당|혈압|콜레스테롤|중성\\s*지방|대사|항산화|영양\\s*균형|뼈\\s*건강|칼슘\\s*흡수|소화\\s*기능|위\\s*건강|구강\\s*건강|요로\\s*건강|여성\\s*건강|남성\\s*건강|전립선\\s*건강))(?=.*(?:도움\\s*주는|도움|개선|강화|증진|유지|보호|활성화|활성|증가|감소|조절|완화|관리|케어|촉진|높여\\s*주는|좋아지는|좋아지는\\s*데\\s*도움))",
-      "weight": 6.0,
+      "weight": 6,
       "is_exception": false,
       "rationale": "기능성 효능 표현은 일부 합법 표현과 경계가 존재해 중위험으로 평가",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_3",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_3"
+      ],
+      "safeHarborLawKeys": ["MFDS_NOTICE_2024_62_FUNCTIONAL_LABEL_AD_ALLOWED"]
     },
     {
       "main_category": "1.4 건강기능식품으로 오인 가능성",
       "sub_category": "C. 기능성 목적 대상자형",
       "combination": "(대상자표현 + 영양/건강목적표현)",
       "regex": "(?=.*(?:성장기|발육기|임산부|수유부|갱년기|노약자|회복기|환자|질병\\s*후\\s*회복기|어린이|청소년|수험생|중장년층|노년층|중년|노년|학생|직장인|여성|남성))(?=.*(?:영양\\s*보급|건강\\s*관리|건강\\s*보조|영양\\s*공급|영양\\s*보충|기력\\s*보충|체력\\s*보강|활력\\s*보충|성장\\s*영양|전용\\s*영양))",
-      "weight": 4.0,
+      "weight": 4,
       "is_exception": false,
       "rationale": "대상자 목적형 표현은 회색지대가 많고 단독으로는 위반 확정성이 낮아 저위험",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_3",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_3"
+      ],
+      "safeHarborLawKeys": ["MFDS_NOTICE_2024_62_FUNCTIONAL_LABEL_AD_ALLOWED"]
     },
     {
       "main_category": "2.1 과대효능",
       "sub_category": "A. 신체조직 효능 과장형",
       "combination": "(신체조직 + 효능표현)",
-      "regex": "(?=.*(?:피부\\s*장벽|장\\s*건강|간\\s*기능|혈액\\s*순환|눈\\s*건강|두피|두뇌|위|복부|장|간|피부|몸속|세포|혈관|지방|콜라겐|에너지|폐|부종|면역|활력|기억력|염증|장벽|배변|수면))(?=.*(?:재생|개선|제거|배출|향상|감소|정화|활성|복구|강화|리셋|복원|디톡스|부스트|충전|무력화|촉진|회복))",
-      "weight": 8.0,
+      "regex": "(?=.*(?:피부\\s*장벽|장\\s*건강|간\\s*기능|혈액\\s*순환|눈\\s*건강|두피|두뇌|위|복부|장|간|피부|몸속|세포|혈관|지방|체\\s*지방|복부\\s*지방|내장\\s*지방|뱃살|살|체중|몸무게|요요|식욕|입맛|폭식|야식|공복감|허기|콜라겐|에너지|폐|부종|면역|활력|기억력|염증|장벽|배변|수면))(?=.*(?:재생|개선|제거|배출|향상|감소|정화|활성|복구|강화|리셋|복원|디톡스|부스트|충전|무력화|촉진|회복|억제|줄|줄었|사라|없어|잡아\\s*주|막아\\s*주|뽑|뿌리\\s*까지|분해|녹|태우|박살|없애|빠져\\s*나가|빠지|빠졌|감량|안\\s*찌|찌지\\s*않|찔\\s*수(?:가)?\\s*없|요요\\s*없|요요\\s*방지))",
+      "weight": 8,
       "is_exception": false,
       "rationale": "신체 기능 효능 과장은 직접 과장광고 위험이 크나 질병 치료 주장보다는 낮은 수준",
-      "legal_reference": "4. 거짓ㆍ과장된 광고나 5. 소비자 기만 광고로 분류해 금지한다"
+      "legal_reference": "4. 거짓ㆍ과장된 광고나 5. 소비자 기만 광고로 분류해 금지한다",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_4",
+        "FOOD_LABEL_AD_ACT_ART8_1_5",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_4_D"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "2.1 과대효능",
       "sub_category": "B. 단기간 극적효과형",
-      "combination": "(기간표현 + 극단결과)",
-      "regex": "(?=.*(?:단\\s*번에|하루\\s*만에|당일|3\\s*일\\s*만에|7\\s*일\\s*만에|1\\s*주\\s*만에|2\\s*주\\s*만에|한\\s*달\\s*만에|순식간에|즉시|바로|100%|99\\.9))(?=.*(?:감량|제거|개선|변화|정상화|회복|감소|해소|복구|재생|리셋|배출|빠르게|단기간|속성))",
-      "weight": 10.0,
+      "combination": "(기간표현 + 극단결과 / 수치감량 + 강조표현 + 감량결과)",
+      "regex": "(?:(?=.*(?:단\\s*번에|하루\\s*만에|하루\\s*만|당일|3\\s*일\\s*만에|7\\s*일\\s*만에|1\\s*주\\s*만에|일주일\\s*만|일주일\\s*만\\s*먹어도|2\\s*주\\s*만에|한\\s*달\\s*만에|한\\s*달|한달|며칠|며칠\\s*만에|단기간|순식간에|즉시|바로|100%|99\\.9))(?=.*(?:감량|제거|개선|변화|정상화|회복|감소|해소|복구|재생|리셋|배출|빠르게|속성|kg|킬로|빠지|빠졌|빠지고|빼|빼드|체중\\s*감소|몸무게\\s*감소))|(?=.*(?:최소|무려|딱|기본|평균|단|고작|싹))(?=.*(?:\\d+\\s*(?:kg|킬로)|\\d+\\s*에서\\s*\\d+\\s*(?:kg|킬로)|\\d+\\s*~\\s*\\d+\\s*(?:kg|킬로)))(?=.*(?:빠지|빠졌|빠지고|빼|빼드|감량|줄었|줄어)))",
+      "weight": 10,
       "is_exception": false,
       "rationale": "단기간 극적효과는 허위·과장 가능성과 적발 빈도가 높아 최고위험",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_4",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_4_D"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "2.1 과대효능",
       "sub_category": "C. 후기/체험기 기만형",
       "combination": "(후기표현 + 결과표현)",
       "regex": "(?=.*(?:실제\\s*후기|리얼\\s*후기|체험\\s*기|체험기|고객\\s*후기|복용\\s*기|먹어\\s*봤더니|직접\\s*먹어\\s*본\\s*후기|사용\\s*후기|비포\\s*애프터|before\\s*after|변화\\s*사진|후기\\s*인증|인증\\s*샷|리뷰|간증\\s*후기|섭취\\s*후기|복용\\s*후기))(?=.*(?:감량|붓기\\s*제거|피부\\s*변화|집중력\\s*향상|다시\\s*태어난|재생|변화|복구|감소|수분\\s*제거|피로\\s*회복|간\\s*해독|부활|탄력|회복))",
-      "weight": 8.0,
+      "weight": 8,
       "is_exception": false,
       "rationale": "후기·체험기 기반 기만은 소비자 오인 유발이 크고 기만광고 핵심 유형",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_5",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_5_C"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "2.1 과대효능",
       "sub_category": "D. 현혹 표현형",
       "combination": "(현혹표현 단독)",
       "regex": "(?:주문\\s*쇄도|다시\\s*추천|입소문|입\\s*소문|소문\\s*폭발|쫙\\s*쫙|문의\\s*폭발|먹어\\s*봐주|없어서\\s*못\\s*파는|품절\\s*임박|품절\\s*대란|한\\s*사\\s*장\\s*추천\\s*세트|주변\\s*사장\\s*추천|주문\\s*폭주|맘카페\\s*추천|단독\\s*구매|전통\\s*비방|황실\\s*비방|고서\\s*비방|특허\\s*비법|비법\\s*추출|독자\\s*배합|믿고\\s*먹는|특제\\s*비법|비밀\\s*추출|황실\\s*비법|비방\\s*추출|특별\\s*비법)",
-      "weight": 4.0,
+      "weight": 4,
       "is_exception": false,
       "rationale": "현혹 표현은 단독으로는 보조 신호 성격이 강해 저위험",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_5",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_5_C"
+      ],
+      "safeHarborLawKeys": []
+    },
+    {
+      "main_category": "2.1 과대효능",
+      "sub_category": "E. 후기/보장형 과장 표현",
+      "combination": "(보증성 발화·체험담·만능해결·대안불필요 표현)",
+      "regex": "(?:(?=.*(?:면허|자격증|이름|직업|커리어))(?=.*(?:반납|걸|책임|보장|장담))|(?=.*(?:수십\\s*명|수백\\s*명|많은\\s*사람|제가\\s*직접|직접\\s*경험|후기|사례))(?=.*(?:빼|빠지|좋아지|개선|효과|해결|성공|감량))|(?=.*(?:모든\\s*걸|다|전부|한\\s*번에|싹))(?=.*(?:해결|끝|관리|잡아\\s*주|케어))|(?:이거(?:면|만| 하나면)?|이것(?:만| 하나면)?|이\\s*제품(?:이면|만으로))\\s*(?:돼|됩니다|충분|끝)|(?:다른\\s*(?:건|거|제품|방법))\\s*(?:다\\s*)?(?:필요\\s*없|안\\s*해도\\s*돼))",
+      "weight": 8,
+      "is_exception": false,
+      "rationale": "체험담, 보증성 발화, 만능 해결, 대안 불필요 표현은 객관적 근거 없이 효능을 보장하거나 소비자를 오인시킬 수 있으므로 과대효능 표현으로 탐지",
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_4",
+        "FOOD_LABEL_AD_ACT_ART8_1_5",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_4_D",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_5_C"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "2.1 과대효능",
       "sub_category": "E. 감량 수치형",
-      "combination": "(감량표현 + 감량수치)",
-      "regex": "(?=.*(?:감량|빠짐|빠지|뺀|체중\\s*감소|살\\s*빠))(?=.*(?:\\d+(?:\\.\\d+)?\\s*(?:kg|킬로|키로)|-\\s*\\d+\\s*kg|\\d+\\s*사이즈|\\d+\\s*인치|\\d+\\s*호))",
-      "weight": 8.0,
+      "combination": "(체중 수치 + 감량 표현)",
+      "regex": "(?=.*(?:\\d+(?:\\.\\d+)?(?:\\s*(?:~|-)\\s*\\d+(?:\\.\\d+)?)?\\s*(?:kg|킬로|키로)))(?=.*(?:감량|체중\\s*(?:감소|감량)|살\\s*(?:감소|빠짐|빼기)))",
+      "weight": 10,
       "is_exception": false,
-      "rationale": "구체적 감량 수치 제시는 허위·과장 가능성이 높고 다이어트 표방 핵심 위반 유형",
-      "legal_reference": ""
+      "rationale": "구체적인 체중 감량 수치는 결과를 보장하는 과대효능 표현으로 오인될 위험이 높음",
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_4",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_4_D"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "2.1 과대효능",
       "sub_category": "F. 단기간 감량형",
-      "combination": "(기간표현 + 감량표현)",
-      "regex": "(?=.*(?:단\\s*기간|하루\\s*만에|3\\s*일\\s*만에|7\\s*일\\s*만에|1\\s*주\\s*만에|2\\s*주\\s*만에|한\\s*달\\s*만에|일주일\\s*만에|단\\s*번에|즉시|빠르게))(?=.*(?:감량|살\\s*빠|체중\\s*감소|빠짐|빠지|뺀))",
-      "weight": 8.0,
+      "combination": "(단기간 표현 + 감량 수치/결과)",
+      "regex": "(?=.*(?:(?:하루|며칠|일주일|한\\s*주|\\d+\\s*(?:일|주|주일|개월|달))\\s*만(?:에|\\s*(?:먹어도|복용해도|섭취해도))?))(?=.*(?:\\d+(?:\\.\\d+)?(?:\\s*(?:~|-)\\s*\\d+(?:\\.\\d+)?)?\\s*(?:kg|킬로|키로)|감량|살\\s*(?:빠|빼)))",
+      "weight": 10,
       "is_exception": false,
-      "rationale": "단기간 감량 보장은 비현실적 효과 약속으로 과장광고 고위험",
-      "legal_reference": ""
+      "rationale": "짧은 기간 안에 감량 결과가 발생한다고 단정하는 표현은 과장 가능성이 매우 높음",
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_4",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_4_D"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "2.1 과대효능",
       "sub_category": "G. 식욕 억제형",
-      "combination": "(식욕억제표현 단독)",
-      "regex": "(?:식욕\\s*억제|식욕\\s*감소|식욕\\s*조절|식욕\\s*차단|포만감|덜\\s*먹게|덜\\s*당기|입맛\\s*뚝|군것질\\s*억제|폭식\\s*방지|식탐\\s*억제)",
-      "weight": 6.0,
+      "combination": "(식욕 관련어 + 억제/감소 표현)",
+      "regex": "(?=.*(?:식욕|허기|공복감))(?=.*(?:억제|차단|제거|없애|줄여|감소|조절|\\d+(?:\\.\\d+)?\\s*%))",
+      "weight": 8,
       "is_exception": false,
-      "rationale": "식욕 억제 표방은 의약품적 효능 암시에 가까워 과장광고 위험",
-      "legal_reference": ""
+      "rationale": "식욕을 직접 억제하거나 수치로 감소시킨다는 표현은 의약품 유사 효능으로 오인될 위험이 높음",
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_4",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_4_D"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "2.1 과대효능",
       "sub_category": "H. 지방 제거·배출형",
-      "combination": "(지방대상 + 제거/배출표현)",
-      "regex": "(?=.*(?:지방|체지방|뱃살|복부\\s*지방|내장\\s*지방))(?=.*(?:제거|배출|분해|연소|태우|녹이|없애|컷|감소))",
-      "weight": 8.0,
+      "combination": "(지방 + 제거/배출 표현)",
+      "regex": "(?=.*(?:지방|체지방|내장\\s*지방))(?=.*(?:제거|배출|분해|용해|연소|녹여|녹이는))",
+      "weight": 8,
       "is_exception": false,
-      "rationale": "지방 제거·배출 표방은 신체 작용 과장으로 과대효능 위반 신호",
-      "legal_reference": ""
+      "rationale": "지방을 직접 제거·배출·분해한다고 단정하는 표현은 과대효능 오인 위험이 높음",
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_4",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_4_D"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "2.1 과대효능",
       "sub_category": "I. 요요 없음/살 안 찜형",
-      "combination": "(요요없음/살안찜표현 단독)",
-      "regex": "(?:요요\\s*없|요요\\s*방지|요요\\s*걱정\\s*없|살\\s*안\\s*찌|살\\s*안\\s*찜|살\\s*찌지\\s*않|다시\\s*안\\s*찌|찐\\s*살\\s*걱정\\s*없)",
-      "weight": 6.0,
+      "combination": "(요요 없음 또는 살이 찌지 않음 단정)",
+      "regex": "(?:요요\\s*(?:없음|없는|없다|걱정\\s*없)|살\\s*(?:안\\s*찜|안\\s*쪄|안\\s*찌는|찌지\\s*않는|찔\\s*일\\s*없))",
+      "weight": 8,
       "is_exception": false,
-      "rationale": "요요 없음·살 안 찜 보장은 입증 불가한 효과 약속으로 기만 소지",
-      "legal_reference": ""
+      "rationale": "요요나 체중 증가가 없다고 단정하는 표현은 지속적인 감량 효과를 보장하는 과장 표현임",
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_4",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_4_D"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "2.2 전문가 추천",
       "sub_category": "A. 전문가 추천형",
       "combination": "(전문가 주체 + 추천행위)",
       "regex": "(?=.*(?:대\\s*학\\s*교수|치과\\s*의사|전문의|수의사|한약사|한의사|의료진|의사|약사|교수|닥터|박사|전문가|권위자|명의|원장|한의원장|약국장|연구진|의료\\s*전문가|건강\\s*전문가))(?=.*(?:추천|권장|권하|권하는|선택|픽|초이스|제안|소개|꼽은|고른|엄선|강추|권해|권했습니다|추천템|추천\\s*제품|추천\\s*원료))",
-      "weight": 6.0,
+      "weight": 6,
       "is_exception": false,
       "rationale": "전문가 추천 표현은 명시적 금지 유형이나 상대적으로 직접 위해성은 낮아 중위험",
-      "legal_reference": "5. 소비자를 기만하는 표시 또는 광고로 분류해 금지한다 : 단 의사 등이 해당 제품의 연구ㆍ개발에 직접참여한 사실만을 나타내는 표시ㆍ광고는 예외적으로 허용한다."
+      "legal_reference": "5. 소비자를 기만하는 표시 또는 광고로 분류해 금지한다 : 단 의사 등이 해당 제품의 연구ㆍ개발에 직접참여한 사실만을 나타내는 표시ㆍ광고는 예외적으로 허용한다.",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_5",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_5_D"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "2.2 전문가 추천",
       "sub_category": "B. 전문가 보증/공인형",
       "combination": "(전문가 주체 + 보증행위)",
       "regex": "(?=.*(?:대\\s*학\\s*교수|치과\\s*의사|전문의|수의사|한약사|한의사|의료진|의사|약사|교수|닥터|박사|전문가|권위자|명의|원장|한의원장|약국장|연구진|의료\\s*전문가|건강\\s*전문가|병원|의원|한의원|약국|대학\\s*병원|의료원|연구소|학회|협회|기관))(?=.*(?:보증|인정|검증|공인|인증|승인|확인|입증|증명|보장|공식\\s*인정|품질\\s*인증|안전성\\s*검증|효능\\s*입증|전문가\\s*검증|임상\\s*검증))",
-      "weight": 8.0,
+      "weight": 8,
       "is_exception": false,
       "rationale": "전문가 보증·공인은 추천보다 권위 오인 효과가 강해 고위험",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_5",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_5_D"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "2.2 전문가 추천",
       "sub_category": "C. 전문가 사용형",
       "combination": "(전문가 주체 + 사용행위)",
       "regex": "(?=.*(?:대\\s*학\\s*교수|치과\\s*의사|전문의|수의사|한약사|한의사|의료진|의사|약사|교수|닥터|박사|전문가|권위자|명의|원장|한의원장|약국장|연구진|의료\\s*전문가|건강\\s*전문가))(?=.*(?:사용|복용|섭취|먹는|먹고\\s*있는|챙겨\\s*먹|애용|즐겨\\s*먹|늘\\s*먹|매일\\s*먹|직접\\s*먹|직접\\s*사용|써\\s*본|써보|먹어\\s*본|마시는|바르는|처방처럼\\s*쓰))",
-      "weight": 6.0,
+      "weight": 6,
       "is_exception": false,
       "rationale": "전문가 사용 표현은 추천형과 유사 수준으로 중위험",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_5",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_5_D"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "2.2 전문가 추천",
@@ -229,7 +428,9 @@
       "weight": 0,
       "is_exception": true,
       "rationale": "",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "2.2 전문가 추천",
@@ -239,57 +440,115 @@
       "weight": 0,
       "is_exception": true,
       "rationale": "",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [],
+      "safeHarborLawKeys": []
+    },
+    {
+      "main_category": "2.2 전문가 추천",
+      "sub_category": "예외처리",
+      "combination": "(사용행위 + 전문가 주체 + 상담권고)",
+      "regex": "(?=.*(?:섭취\\s*전|복용\\s*전|사용\\s*전|먹기\\s*전|드시기\\s*전|섭취|복용|사용))(?=.*(?:치과\\s*의사|전문의|수의사|한약사|한의사|의료진|의사|약사|전문가|의료\\s*전문가|건강\\s*전문가))(?=.*(?:상담|상의|문의|확인|진료))",
+      "weight": 0,
+      "is_exception": true,
+      "rationale": "",
+      "legal_reference": "",
+      "lawKeys": [],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "2.3 비과학적 표현",
       "sub_category": "A. 비공인 유사과학 용어 사용",
       "combination": "(유사과학 용어 단독)",
       "regex": "(?:디톡스\\s*워터|디톡스\\s*에너지|세포\\s*주파수|세포\\s*에너지|세포\\s*디톡스|메타\\s*물\\s*푸드\\s*에너지|조율\\s*토파즈|은\\s*이온\\s*워터|생명\\s*수|이온\\s*수|약\\s*수|파동\\s*에너지|구조\\s*수|환원\\s*수|알칼리\\s*수|수소\\s*수|양자\\s*수|공명\\s*수|진동\\s*수|생체\\s*에너지|키토\\s*제닉\\s*키토|타시\\s*식|탄수\\s*신전지|대사\\s*리셋|대사\\s*스위치|디톡스\\s*스위치|내장\\s*대청소|생명\\s*에너지|양자\\s*에너지|세포\\s*공명|바이오\\s*진동|생체\\s*전자|분자\\s*공명|세포\\s*주파수|나노\\s*톡스|DNA\\s*팅|DNA\\s*스팅|세포\\s*활성|세포\\s*정화|세포\\s*디톡스|미토콘드리아\\s*에너지|오토\\s*파지\\s*수로|생체\\s*공명|에너지\\s*밸런스|면역\\s*에너지|생명\\s*에너지|클린\\s*에너지|해독\\s*에너지|파동\\s*에너지|진동\\s*에너지|주파수\\s*에너지|파워\\s*밸런스|분자\\s*공명\\s*수|바이오\\s*시그널|셀룰러\\s*디톡스|셀룰러\\s*에너지|세포\\s*리셋|DNA\\s*부스팅|장\\s*에너지|장청소\\s*포뮬러|미토\\s*프롤)",
-      "weight": 6.0,
+      "weight": 6,
       "is_exception": false,
       "rationale": "비공인 유사과학 용어는 문제 소지는 있으나 단독으론 직접 위반 강도가 낮아 중위험",
-      "legal_reference": "5. 소비자를 기만하는 표시 또는 광고로 분류해 금지한다"
+      "legal_reference": "5. 소비자를 기만하는 표시 또는 광고로 분류해 금지한다",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_5",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_5_CHA"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "3.1 최고, 최초 등 입증 어려운 부당비교",
       "sub_category": "A. 최초 / 최고 / 유일 / 1위",
       "combination": "(범위표현 + 최상급 수식어 + 제품/효능)",
       "regex": "(?=.*(?:(?:국내|대한민국|한국|세계|글로벌|업계|시장|국내외|아시아|전국)\\s*)?(?:유일\\s*무이|넘버\\s*원|No\\.?\\s*1|탑\\s*클래스|프리미엄|최초|최고|유일|1\\s*위|독보적|최상|선도적|대표|원조))(?=.*(?:건강\\s*식품|건강\\s*기능\\s*식품|영양\\s*제|제품|성분|원료|기술|효능|포뮬러|솔루션|브랜드))",
-      "weight": 6.0,
+      "weight": 6,
       "is_exception": false,
       "rationale": "최초·최고·1위 표현은 입증 여부에 따라 갈릴 수 있어 중위험",
-      "legal_reference": "7. 객관적인 근거 없이 자기 또는 자기의 식품등을 다른 영업자나 다른 영업자의 식품등과 부당하게 비교하는 표시 또는 광고를 금지한다 : 단 해당 비교 근거가 명확할 경우 예외적으로 허용한다"
+      "legal_reference": "7. 객관적인 근거 없이 자기 또는 자기의 식품등을 다른 영업자나 다른 영업자의 식품등과 부당하게 비교하는 표시 또는 광고를 금지한다 : 단 해당 비교 근거가 명확할 경우 예외적으로 허용한다",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_7",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_7_A",
+        "MFDS_NOTICE_2025_79_ART2_4_B"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "3.1 최고, 최초 등 입증 어려운 부당비교",
       "sub_category": "B. 근거 없는 우월 비교",
       "combination": "(비교대상 + 비교어 + 우월표현)",
       "regex": "(?=.*(?:다른\\s*제품|기존\\s*제품|일반\\s*제품|경쟁\\s*제품|시중\\s*제품|타\\s*브랜드|일반\\s*영양제|기존\\s*방식|타\\s*업체|타사))(?=.*(?:비교\\s*하면|비교\\s*해|비교\\s*시|대조\\s*하면|대비|보다|비교|대조))(?=.*(?:압도적|월등|뛰어난|탁월한|우수|안정적|독보적|차원\\s*이\\s*다른|수준\\s*이\\s*다른|퀄리티\\s*가\\s*다른|클래스\\s*가\\s*다른|차별화|혁신적))",
-      "weight": 8.0,
+      "weight": 8,
       "is_exception": false,
       "rationale": "근거 없는 우월 비교는 소비자 오인 가능성과 적발 실무가 많아 고위험",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_7",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_7_A",
+        "MFDS_NOTICE_2025_79_ART2_4_B"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "3.1 최고, 최초 등 입증 어려운 부당비교",
       "sub_category": "B. 근거 없는 우월 비교",
       "combination": "(비교대상 + 숫자배수 + 효과/함량)",
       "regex": "(?=.*(?:다른\\s*제품|기존\\s*제품|일반\\s*제품|경쟁\\s*제품|시중\\s*제품|타\\s*브랜드|일반\\s*영양제|기존\\s*방식|타\\s*업체|타사))(?=.*(?:\\d+(?:\\.\\d+)?\\s*배|\\d+(?:\\.\\d+)?\\s*%|수\\s*배|몇\\s*배|200\\s*%|300\\s*%|500\\s*%))(?=.*(?:효과|효능|함량|흡수\\s*율|지속\\s*력|활성\\s*도|농도|순도|주요\\s*성분|전달\\s*력))",
-      "weight": 10.0,
+      "weight": 10,
       "is_exception": false,
       "rationale": "배수·퍼센트 수치 비교는 허위 가능성이 높고 객관성 결여 리스크가 커 최고위험",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_7",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_7_A",
+        "MFDS_NOTICE_2025_79_ART2_4_B"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "3.1 최고, 최초 등 입증 어려운 부당비교",
       "sub_category": "C. 타사 비방형",
       "combination": "(타사 + 부정속성)",
       "regex": "(?=.*(?:다른\\s*제품|기존\\s*제품|일반\\s*제품|경쟁\\s*제품|시중\\s*제품|타\\s*브랜드|일반\\s*영양제|기존\\s*방식|타\\s*업체|타사))(?=.*(?:저급\\s*원료|화학\\s*물|불필요|검증\\s*되지\\s*않은|검증\\s*되지\\s*않음|품질\\s*문제|부작용|효과\\s*없는|효과\\s*없|안전성\\s*문제|믿을\\s*수\\s*없는|불안전|위험|문제\\s*있는))",
-      "weight": 8.0,
+      "weight": 8,
       "is_exception": false,
       "rationale": "타사 비방은 명시적 문제 유형이며 경쟁비방과 소비자 오인 위험으로 고위험",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [
+        "FOOD_LABEL_AD_ACT_ART8",
+        "FOOD_LABEL_AD_DECREE_ART3_APPENDIX1",
+        "MFDS_NOTICE_2025_79_UNFAIR_LABEL_AD_CONTENT",
+        "FOOD_LABEL_AD_ACT_ART8_1_6",
+        "FOOD_LABEL_AD_DECREE_APPENDIX1_6",
+        "MFDS_NOTICE_2025_79_ART2_4_A"
+      ],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "3.1 최고, 최초 등 입증 어려운 부당비교",
@@ -299,7 +558,9 @@
       "weight": 0,
       "is_exception": true,
       "rationale": "",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "3.1 최고, 최초 등 입증 어려운 부당비교",
@@ -309,7 +570,9 @@
       "weight": 0,
       "is_exception": true,
       "rationale": "",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "3.1 최고, 최초 등 입증 어려운 부당비교",
@@ -319,7 +582,9 @@
       "weight": 0,
       "is_exception": true,
       "rationale": "",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [],
+      "safeHarborLawKeys": []
     },
     {
       "main_category": "3.1 최고, 최초 등 입증 어려운 부당비교",
@@ -329,7 +594,9 @@
       "weight": 0,
       "is_exception": true,
       "rationale": "",
-      "legal_reference": ""
+      "legal_reference": "",
+      "lawKeys": [],
+      "safeHarborLawKeys": []
     }
   ]
 }

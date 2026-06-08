@@ -44,11 +44,11 @@ export type RequestSttMessage = {
 }
 
 // overlay 가 "상세 보고서 탭 열어줘" 라고 background 에 요청 (콘텐츠 스크립트엔 chrome.tabs 없음)
-//   kind: rule=1차(룰 근거, report.html) · ai=2차(AI 동작 과정, report2.html). 기본은 rule.
+//   kind: rule=1차(룰 근거, report.html) · ai=2차(AI 동작, report2.html) · final=최종 종합(report3.html). 기본은 rule.
 export type OpenReportMessage = {
   type: "OPEN_REPORT"
   videoId: string
-  kind?: "rule" | "ai"
+  kind?: "rule" | "ai" | "final"
 }
 
 // 2차 보고서(report2.tsx)가 /api/explain 에서 받는 한 문장의 모델 내부 동작 — 서버 ExplainItem 과 같은 모양
