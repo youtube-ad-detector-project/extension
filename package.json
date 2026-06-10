@@ -6,6 +6,7 @@
   "author": "limjaejoon",
   "scripts": {
     "dev": "plasmo dev",
+    "dev:servers": "node scripts/dev-servers.mjs",
     "build": "plasmo build",
     "package": "plasmo package",
     "typecheck": "tsc --noEmit"

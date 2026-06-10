@@ -211,6 +211,7 @@ function SentenceCard({
         <span style={styles.riskPct}>위험도 {report.sentenceRiskPercent}%</span>
         <span style={styles.statusTag}>{report.finalStatus}</span>
       </div>
+      <p style={styles.plainConclusion}>{report.plainConclusion}</p>
       <p style={styles.riskExp}>{report.riskExplanation}</p>
 
       {/* 탐지 근거 — rule(직접)·trigger(후보) 항목별 */}
@@ -365,6 +366,15 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"
   },
   statusTag: { fontSize: 11, color: "#999" },
+  plainConclusion: {
+    margin: "4px 0 8px",
+    padding: "8px 10px",
+    background: "#f8fbff",
+    border: "1px solid #dbe8ff",
+    borderRadius: 6,
+    fontSize: 14,
+    color: "#1f2937"
+  },
   riskExp: { margin: "0 0 10px", fontSize: 13, color: "#555" },
   block: { marginTop: 8, paddingTop: 10, borderTop: "1px dashed #e0e0e0" },
   blockTitle: { fontSize: 12, fontWeight: 700, color: "#444", marginBottom: 8 },

@@ -9,6 +9,8 @@ import type { ScannedLine, VideoRisk } from "./adScan"
 import type {
   AnalysisResult,
   FinalStatus,
+  RuleHit,
+  TriggerHit,
   UserFacingDecision
 } from "./matchingEngine"
 
@@ -32,6 +34,7 @@ export type SentenceReport = {
   sentence: string
   finalStatus: FinalStatus
   userFacingDecision: UserFacingDecision
+  plainConclusion: string
   sentenceRiskPercent: number
   riskExplanation: string
   detectedReasons: DetectedReason[]
@@ -113,19 +116,237 @@ function buildTriggerExplanation(r: AnalysisResult): string | null {
   const hits = r.triggerAnalysis?.hits ?? []
   if (hits.length === 0) return null
   const names = hits.map((t) => t.categoryName).join(", ")
-  return `트리거 신호(${names})가 감지되어 모델 추가 검증 대상이 되었습니다. 트리거는 위반 확정 근거가 아니라 의심 신호입니다.`
-}
-
-function formatConfidence(confidence: number): string {
-  if (!Number.isFinite(confidence)) return "0"
-  return String(Math.round(confidence * 10000) / 10000)
+  return `트리거 신호(${names})가 감지되어 모델 추가 검증 대상이 되었습니다. 트리거는 최종 판단 근거가 아니라 검토 신호입니다.`
 }
 
 // 모델 결과가 합쳐진 경우(attachModelResult 거침)만 설명, 아니면 null
 function buildModelExplanation(r: AnalysisResult): string | null {
   const m = r.modelResult
   if (!m) return null
-  return `AI 분류 모델 예측: ${m.predictionLabel} (신뢰도 ${formatConfidence(m.confidence)}). 이는 법적 판단이 아니라 모델의 자동 예측 결과입니다.`
+  return `AI 분류 모델은 이 문장을 ${m.predictionLabel}으로 분류했습니다. 이는 법적 판단이 아니라 모델의 자동 예측 결과입니다.`
+}
+
+function unique(items: string[]): string[] {
+  return Array.from(new Set(items.filter(Boolean)))
+}
+
+function quoteEvidence(value: string | null | undefined): string {
+  return value ? `“${value}”` : "해당 표현"
+}
+
+function joinNatural(items: string[]): string {
+  if (items.length === 0) return ""
+  if (items.length === 1) return items[0]
+  return `${items.slice(0, -1).join(", ")} 및 ${items[items.length - 1]}`
+}
+
+function simplifyLegalReference(reference: string): string {
+  const actArticle = reference.match(/법률 제8조제1항제(\d+)호/)
+  if (actArticle) {
+    return `식품표시광고법 제8조제1항제${actArticle[1]}호`
+  }
+
+  const appendixItem = reference.match(/\[별표 1\] 제(\d+)호([가-힣])?목?/)
+  if (appendixItem) {
+    return `식품표시광고법 시행령 별표 1 제${appendixItem[1]}호${appendixItem[2] ?? ""}${appendixItem[2] ? "목" : ""}`
+  }
+
+  if (reference.includes("법률 제8조:")) {
+    return "식품표시광고법 제8조"
+  }
+  if (reference.includes("시행령 제3조 및 [별표 1]")) {
+    return "식품표시광고법 시행령 제3조 및 별표 1"
+  }
+  if (reference.includes("식품의약품안전처고시 제2025-79호")) {
+    const noticeArticle = reference.match(/제(\d+)조제(\d+)호([가-힣])목/)
+    if (noticeArticle) {
+      return `식약처 고시 제2025-79호 제${noticeArticle[1]}조제${noticeArticle[2]}호${noticeArticle[3]}목`
+    }
+    return "식약처 고시 제2025-79호"
+  }
+  if (reference.includes("식품의약품안전처고시 제2024-62호")) {
+    return "식약처 고시 제2024-62호"
+  }
+
+  return reference.split(":")[0] ?? reference
+}
+
+function summarizeLegalReferences(references: string[]): string | null {
+  const labels = unique(references.map(simplifyLegalReference))
+  if (labels.length === 0) return null
+
+  const visible = labels.slice(0, 2)
+  return `${joinNatural(visible)}${labels.length > visible.length ? " 등" : ""}`
+}
+
+function getRulePrimaryPriority(subCategory: string): number {
+  if (subCategory.includes("질병") || subCategory.includes("치료")) return 100
+  if (subCategory.includes("의약품 대체")) return 95
+  if (subCategory.includes("단기간 감량")) return 92
+  if (subCategory.includes("감량 수치")) return 90
+  if (subCategory.includes("단기간 극적효과")) return 88
+  if (subCategory.includes("후기/보장")) return 86
+  if (subCategory.includes("지방")) return 84
+  if (subCategory.includes("식욕")) return 82
+  if (subCategory.includes("요요")) return 80
+  if (subCategory.includes("전문가")) return 75
+  if (subCategory.includes("비교") || subCategory.includes("최고")) return 70
+  return 50
+}
+
+function pickPrimaryRuleHit(hits: RuleHit[]): RuleHit | null {
+  return [...hits].sort(
+    (a, b) =>
+      getRulePrimaryPriority(b.subCategory) -
+        getRulePrimaryPriority(a.subCategory) ||
+      b.weight - a.weight ||
+      b.severityCoefficient - a.severityCoefficient
+  )[0] ?? null
+}
+
+function pickPrimaryTriggerHit(hits: TriggerHit[]): TriggerHit | null {
+  return [...hits].sort(
+    (a, b) =>
+      b.weight - a.weight ||
+      b.severityCoefficient - a.severityCoefficient
+  )[0] ?? null
+}
+
+function getRulePlainRiskText(hit: RuleHit): string {
+  const subCategory = hit.subCategory
+
+  if (subCategory.includes("의약품 대체")) {
+    return "식품을 의약품이나 의료행위의 대체 수단처럼 인식하게 할 소지가 있어"
+  }
+  if (subCategory.includes("의약품 유사")) {
+    return "식품을 의약품과 비슷한 제품처럼 오인하게 할 소지가 있어"
+  }
+  if (subCategory.includes("질병") || subCategory.includes("치료")) {
+    return "질병의 예방·치료 효과가 있는 식품처럼 인식하게 할 소지가 있어"
+  }
+  if (subCategory.includes("건강기능식품")) {
+    return "일반 식품을 건강기능식품처럼 오인하게 할 소지가 있어"
+  }
+  if (
+    subCategory.includes("감량") ||
+    subCategory.includes("식욕") ||
+    subCategory.includes("지방") ||
+    subCategory.includes("요요") ||
+    subCategory.includes("후기/보장")
+  ) {
+    return "체중감량 효과를 과장하거나 보장하는 표현으로 받아들여질 소지가 있어"
+  }
+  if (subCategory.includes("전문가")) {
+    return "전문가가 제품 효능을 보증하거나 추천하는 것처럼 받아들여질 소지가 있어"
+  }
+  if (subCategory.includes("비교") || subCategory.includes("최고")) {
+    return "객관적 근거 없이 제품이 더 우수하다고 받아들여질 소지가 있어"
+  }
+
+  return "소비자가 제품 효과를 실제보다 크게 인식할 소지가 있어"
+}
+
+function getTriggerPlainRiskText(hit: TriggerHit): string {
+  const categoryName = hit.categoryName
+
+  if (categoryName.includes("의료 회피")) {
+    return "식품을 의약품이나 의료행위의 대체 수단처럼 오해하게 할 소지가 있어"
+  }
+  if (categoryName.includes("증상") || categoryName.includes("신체 변화")) {
+    return "질병·증상 개선 효과를 우회적으로 암시할 소지가 있어"
+  }
+  if (categoryName.includes("감량") || categoryName.includes("체중")) {
+    return "체중감량 효과를 우회적으로 강조하는 표현으로 볼 소지가 있어"
+  }
+  if (categoryName.includes("후기")) {
+    return "체험담을 통해 효능을 우회적으로 암시할 소지가 있어"
+  }
+  if (categoryName.includes("우월성") || categoryName.includes("비교")) {
+    return "객관적 근거 없이 제품 우월성을 암시할 소지가 있어"
+  }
+
+  return "직접 룰에는 닿지 않지만 소비자 오인을 유발할 수 있는 신호가 있어"
+}
+
+function buildRuleConclusion(r: AnalysisResult): string | null {
+  const hits = r.ruleAnalysis?.hits ?? []
+  const primaryHit = pickPrimaryRuleHit(hits)
+  if (!primaryHit) return null
+
+  const legalSummary = summarizeLegalReferences(
+    primaryHit.legalReferences.length
+      ? primaryHit.legalReferences
+      : primaryHit.legalReference
+        ? [primaryHit.legalReference]
+        : []
+  )
+  const additionalCount = Math.max(0, hits.length - 1)
+
+  return (
+    `문장 내 ${quoteEvidence(primaryHit.matchedText)} 표현은 ` +
+    `${getRulePlainRiskText(primaryHit)}, ` +
+    `${legalSummary ? `${legalSummary} 관련 ` : ""}` +
+    "고위험 의심 신호로 표시됩니다." +
+    `${additionalCount > 0 ? ` 추가로 ${additionalCount}개 위험 유형이 함께 감지되었습니다.` : ""}`
+  )
+}
+
+function buildTriggerConclusion(r: AnalysisResult): string | null {
+  const hits = r.triggerAnalysis?.hits ?? []
+  const primaryHit = pickPrimaryTriggerHit(hits)
+  if (!primaryHit) return null
+
+  const legalSummary = summarizeLegalReferences(primaryHit.candidateLegalReferences)
+  const legalPhrase = legalSummary ? `${legalSummary} 관련 후보 신호로 ` : ""
+  const prefix =
+    `문장 내 ${quoteEvidence(primaryHit.matchedText)} 표현은 ` +
+    `${getTriggerPlainRiskText(primaryHit)}, ${legalPhrase}`
+
+  if (r.modelResult?.prediction === 0) {
+    return `${prefix}감지되었지만 AI 모델은 비의심으로 분류했습니다. 법적 판단이 아니라 검토 참고 항목입니다.`
+  }
+
+  if (r.modelResult?.prediction === 1) {
+    return `${prefix}감지되었고 AI 모델도 의심으로 분류했습니다. 최종 판단은 관계 기관 또는 전문가 검토가 필요합니다.`
+  }
+
+  return `${prefix}AI 추가 검증 대상으로 표시됩니다. 트리거는 최종 판단 근거가 아니라 검토 신호입니다.`
+}
+
+function buildPlainConclusion(r: AnalysisResult): string {
+  if (r.finalStatus === "Rule-Positive") {
+    return (
+      buildRuleConclusion(r) ??
+      "자동 탐지 기준상 고위험 의심 신호가 감지되었습니다. 최종 판단은 관계 기관 또는 전문가 검토가 필요합니다."
+    )
+  }
+
+  if (r.finalStatus === "Route-to-Model") {
+    return (
+      buildTriggerConclusion(r) ??
+      "직접 룰에는 도달하지 않았지만 추가 검토가 필요한 의심 신호가 감지되었습니다."
+    )
+  }
+
+  return "현재 탐지 기준상 뚜렷한 의심 신호가 감지되지 않았습니다."
+}
+
+function buildUserFacingRiskExplanation(r: AnalysisResult): string {
+  if (r.finalStatus === "Rule-Positive") {
+    return "명확한 룰 기반 위험 신호가 감지되어 문장 위험도가 높게 표시됩니다."
+  }
+
+  if (r.finalStatus === "Route-to-Model") {
+    if (r.modelResult?.prediction === 1) {
+      return "우회 표현 신호가 감지되었고 AI 모델도 의심으로 분류해 문장 위험도가 표시됩니다."
+    }
+    if (r.modelResult?.prediction === 0) {
+      return "우회 표현 신호는 감지되었지만 AI 모델이 비의심으로 분류해 문장 위험도는 낮게 표시됩니다."
+    }
+    return "우회 표현 신호가 감지되어 AI 추가 검토 대상으로 표시됩니다."
+  }
+
+  return "현재 탐지 기준상 문장 위험도가 낮게 표시됩니다."
 }
 
 // 문장 1개 → 보고서 항목 — 점수/판정/근거/예외를 엔진이 만든 값에서 그대로 옮긴다 (새 판단 안 함)
@@ -134,8 +355,9 @@ function buildSentenceReport(r: AnalysisResult): SentenceReport {
     sentence: r.sentence,
     finalStatus: r.finalStatus,
     userFacingDecision: r.userFacingDecision,
+    plainConclusion: buildPlainConclusion(r),
     sentenceRiskPercent: r.sentenceRisk.riskPercent,
-    riskExplanation: r.sentenceRisk.riskExplanation,
+    riskExplanation: buildUserFacingRiskExplanation(r),
     detectedReasons: buildDetectedReasons(r),
     triggerExplanation: buildTriggerExplanation(r),
     modelExplanation: buildModelExplanation(r),
