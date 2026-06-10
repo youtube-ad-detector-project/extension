@@ -65,7 +65,10 @@ function Report2() {
       }
 
       // 성공 자막 → 룰 재스캔 → 위반·의심만 추림 (AI 검증 대상)
-      const scanned = scanCaptions(entry.data.segments)
+      const scanned = scanCaptions(entry.data.segments, {
+        productName: entry.data.productName,
+        videoTitle: entry.data.videoTitle
+      })
       const flagged = scanned.filter((l) => l.status !== "Rule-Negative")
       if (flagged.length === 0) {
         setState({ phase: "ready", videoId, rows: [] })

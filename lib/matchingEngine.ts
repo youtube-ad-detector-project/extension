@@ -149,8 +149,8 @@ interface CompiledTrigger {
   safeHarborLegalReferences: string[];
 }
 
-// 법령 키 → 사용자/LLM 설명용 문구.
-//   최신 법령 문구를 LLM이 추정하지 않도록, 사전에는 key 만 두고 여기서 고정 문구로 풀어준다.
+// 법령 키 → 사용자 보고서 설명용 문구.
+//   최신 법령 문구를 외부 생성기가 추정하지 않도록, 사전에는 key 만 두고 여기서 고정 문구로 풀어준다.
 const LAW_REFERENCES: Record<string, string> = {
   FOOD_LABEL_AD_ACT_ART8:
     '식품 등의 표시ㆍ광고에 관한 법률 제8조: 부당한 표시 또는 광고행위의 금지',
@@ -340,7 +340,7 @@ function calculateSentenceRisk(result: AnalysisResultBase): SentenceRisk {
         riskPercent: Math.round(riskScore * 100),
         riskSource: 'model_confidence',
         riskExplanation:
-          `모델이 위험 클래스로 분류한 신뢰도 ${baseConfidence}에 ` +
+          `AI 모델 분류 결과(${result.modelResult.predictionLabel})의 신뢰도 ${baseConfidence}에 ` +
           `심각도 보정계수 ${severityCoefficient}를 곱해 계산했습니다.`
       };
     }
@@ -532,7 +532,7 @@ function analyzeSentence(
         weight: rule.weight,
         severityLevel: severity.severityLevel,
         severityCoefficient: severity.severityCoefficient,
-        // Rule-Positive 설명용 근거. LLM 은 이 배열에 없는 법령을 새로 만들면 안 된다.
+        // Rule-Positive 설명용 근거. 보고서는 이 배열에 있는 법령만 직접 근거로 표시한다.
         lawKeys: rule.lawKeys ?? [],
         legalReference: rule.legal_reference ?? '',
         legalReferences: legalReferencesFor(rule.lawKeys ?? []),

@@ -13,6 +13,8 @@ export type CaptionSegment = {
 //   source/kind 가 단일 리터럴인 이유: Plan A/B 를 들어내 STT 경로만 남았으므로 다른 값이 나올 수 없다.
 export type CaptionsPayload = {
   videoId: string
+  videoTitle?: string
+  productName?: string
   lang: string
   kind: "stt"
   segments: CaptionSegment[]
@@ -30,6 +32,7 @@ export type CaptionsError = {
 //   stage: queued(잡 생성) → downloading(yt-dlp) → transcribing(Whisper)
 export type CaptionsPending = {
   videoId: string
+  videoTitle?: string
   jobId: string
   server: string
   stage: "queued" | "downloading" | "transcribing"
@@ -41,6 +44,8 @@ export type CaptionsPending = {
 export type RequestSttMessage = {
   type: "REQUEST_STT"
   videoId: string
+  videoTitle?: string
+  productName?: string
 }
 
 // overlay 가 "상세 보고서 탭 열어줘" 라고 background 에 요청 (콘텐츠 스크립트엔 chrome.tabs 없음)

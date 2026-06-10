@@ -74,7 +74,10 @@ function Report3() {
       }
 
       // 성공 자막 → 룰 재스캔 → 위반·의심만 추림 (AI 검증 대상)
-      const scanned = scanCaptions(entry.data.segments)
+      const scanned = scanCaptions(entry.data.segments, {
+        productName: entry.data.productName,
+        videoTitle: entry.data.videoTitle
+      })
       const flaggedLines = scanned.filter((l) => l.status !== "Rule-Negative")
 
       // 위반·의심이 0건이면 classify 생략 → merged=scanned (영상 위험도는 '표시 없음'으로 단락)
@@ -228,7 +231,21 @@ function SentenceCard({
         <p style={styles.sub}>🤖 {report.modelExplanation}</p>
       )}
       {report.healthFoodExplanation && (
-        <p style={styles.sub}>💊 {report.healthFoodExplanation}</p>
+        <p style={styles.sub}>
+          💊 {report.healthFoodExplanation}
+          {report.healthFoodVerificationUrl && (
+            <>
+              {" "}
+              <a
+                style={styles.link}
+                href={report.healthFoodVerificationUrl}
+                target="_blank"
+                rel="noreferrer">
+                확인하기 ↗
+              </a>
+            </>
+          )}
+        </p>
       )}
 
       {/* 예외 적용 — 위반 점수에서 제외된 사유 */}

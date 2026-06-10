@@ -37,12 +37,27 @@ function maybeTriggerStt(): void {
   }
   requested.add(videoId)
 
+  const videoTitle = getCurrentVideoTitle()
+
   // background.onMessage 가 REQUEST_STT 를 받아 runPlanE(videoId) 를 직접 호출한다
-  const msg: RequestSttMessage = { type: "REQUEST_STT", videoId }
-  console.log(TAG, `🎤 STT 요청 전송: 영상=${videoId}`)
+  const msg: RequestSttMessage = { type: "REQUEST_STT", videoId, videoTitle }
+  console.log(
+    TAG,
+    `🎤 STT 요청 전송: 영상=${videoId}, 제목=${videoTitle ?? "(제목 없음)"}`
+  )
   chrome.runtime.sendMessage(msg).catch((e) => {
     console.log(TAG, "❌ STT 요청 전송 실패:", e)
   })
+}
+
+function getCurrentVideoTitle(): string | undefined {
+  const metaTitle = document
+    .querySelector<HTMLMetaElement>('meta[name="title"]')
+    ?.content.trim()
+  const rawTitle = metaTitle || document.title
+  const title = rawTitle.replace(/\s*-\s*YouTube\s*$/i, "").trim()
+
+  return title || undefined
 }
 
 // YouTube SPA 라우팅 완료 이벤트 — 페이지 전환 추적에 가장 신뢰할 수 있는 신호

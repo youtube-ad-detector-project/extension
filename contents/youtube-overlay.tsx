@@ -165,7 +165,10 @@ function Overlay() {
       return null
     }
     console.log(TAG, "🟢 성공 자막 감지 - 룰 스캔 호출 (adScan.scanCaptions)")
-    return scanCaptions(entry.data.segments)
+    return scanCaptions(entry.data.segments, {
+      productName: entry.data.productName,
+      videoTitle: entry.data.videoTitle
+    })
   }, [entry])
   const summary: ScanSummary | null = scanned ? summarize(scanned) : null
 
