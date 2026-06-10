@@ -20,6 +20,11 @@ const TAG = "[yt-cap:bg]"
 // STT 서버 주소 — 학습용이라 하드코딩 (host_permissions 에 동일 값이 있어야 함)
 const STT_SERVER = "http://localhost:3000"
 
+type RequestContext = {
+  videoTitle?: string
+  productName?: string
+}
+
 // 동일 영상 중복 폴링 방지용 — 같은 videoId 로 두 번째 요청이 와도 setInterval 한 개만 돌게
 const planEIntervals = new Map<string, ReturnType<typeof setInterval>>()
 
@@ -35,7 +40,10 @@ chrome.runtime.onMessage.addListener((msg: RuntimeMessage, sender, sendResponse)
 
   if (msg.type === "REQUEST_STT") {
     // Shorts 감지 스크립트가 "이 영상 STT 돌려라" 요청 → STT 잡 시작
-    void runPlanE(msg.videoId)
+    void runPlanE(msg.videoId, {
+      videoTitle: msg.videoTitle,
+      productName: msg.productName
+    })
     return false
   }
 
@@ -113,7 +121,10 @@ async function classifyViaServer(texts: string[]): Promise<ClassifyResponse> {
 
 // STT 잡 등록 → 5초 폴링 → 결과를 saveCaption/saveCaptionError 로 수렴
 //   호출 흐름: onMessage(REQUEST_STT) → runPlanE → POST /api/transcribe → setInterval(poll)
-async function runPlanE(videoId: string): Promise<void> {
+async function runPlanE(
+  videoId: string,
+  context: RequestContext = {}
+): Promise<void> {
   // 같은 영상에 대해 이미 폴링이 돌고 있으면 중복 잡 만들지 않음
   if (planEIntervals.has(videoId)) {
     console.log(TAG, `🔁 STT 중복 호출 무시: 영상=${videoId} (이미 폴링 중)`)
@@ -153,6 +164,7 @@ async function runPlanE(videoId: string): Promise<void> {
   // 잡 생성 직후 storage 를 'pending(queued)' 로 마킹 — overlay 가 진행 상태 인식 가능
   await saveCaptionPending(videoId, {
     videoId,
+    videoTitle: context.videoTitle,
     jobId,
     server: STT_SERVER,
     stage: "queued",
@@ -162,14 +174,18 @@ async function runPlanE(videoId: string): Promise<void> {
   // 2) 5초마다 GET 으로 잡 상태 조회 — 결과/실패 시 interval 정리
   //    setInterval 이라 service worker 가 idle 로 죽으면 폴링도 끊김 (학습용 감수)
   const intervalId = setInterval(() => {
-    void pollPlanE(videoId, jobId)
+    void pollPlanE(videoId, jobId, context)
   }, 5000)
   planEIntervals.set(videoId, intervalId)
 }
 
 // 단발 폴링 호출 — runPlanE 의 setInterval 이 5초마다 부른다
 //   응답 status 별 분기: pending/processing → 진행 갱신, done → 성공 저장+정리, failed → 에러 저장+정리
-async function pollPlanE(videoId: string, jobId: string): Promise<void> {
+async function pollPlanE(
+  videoId: string,
+  jobId: string,
+  context: RequestContext = {}
+): Promise<void> {
   let body: {
     status: "pending" | "processing" | "done" | "failed"
     stage?: "downloading" | "transcribing"
@@ -206,6 +222,7 @@ async function pollPlanE(videoId: string, jobId: string): Promise<void> {
     const stage: "downloading" | "transcribing" = body.stage ?? "downloading"
     await saveCaptionPending(videoId, {
       videoId,
+      videoTitle: context.videoTitle,
       jobId,
       server: STT_SERVER,
       stage,
@@ -227,6 +244,8 @@ async function pollPlanE(videoId: string, jobId: string): Promise<void> {
     }
     const payload: CaptionsPayload = {
       videoId,
+      videoTitle: context.videoTitle,
+      productName: context.productName,
       lang: body.lang,
       kind: "stt",
       segments: body.segments,

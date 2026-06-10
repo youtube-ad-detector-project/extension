@@ -1,10 +1,10 @@
 // 글루 모듈: 저장된 자막(CaptionSegment[]) 과 룰 엔진(analyzeSentence) 을 잇는다.
 //   호출 흐름: youtube-overlay.tsx 가 entry.ok===true 일 때 scanCaptions(segments) 호출 →
-//   여기서 전체 자막에서 건기식 제품명을 1차 탐색 →
+//   여기서 영상 제목/전체 자막에서 건기식 제품명을 1차 탐색 →
 //   자막 줄마다 엔진을 1회씩 돌려 ScannedLine[] 로 변환 → 오버레이가 상태별 색으로 렌더.
 //   "자막 줄 = 문장 1개" 결정에 따라, 세그먼트 텍스트를 그대로 엔진에 넘긴다 (문장 재구성 없음).
-//   단, 제품명이 한 줄에만 등장하고 이후 줄에는 생략될 수 있으므로,
-//   scanCaptions 단계에서 전체 자막 기준으로 감지된 제품명을 각 줄 분석에 함께 전달한다.
+//   단, 제품명이 제목/인트로에만 등장하고 이후 줄에는 생략될 수 있으므로,
+//   scanCaptions 단계에서 영상 단위로 감지된 제품명을 각 줄 분석에 함께 전달한다.
 
 // analyzeSentence: 줄별 분석(룰/예외/트리거 매칭 전부) — 메인 루프에서만 사용
 // findRegisteredHealthFoodInSentence: 정규식 1회만 돌려 건기식 제품명을 찾는 가벼운 함수 — 영상 단위 1차 탐색에 사용
@@ -44,54 +44,77 @@ export type VideoRisk = {
   calculationNote: string;
 };
 
+export type ScanContext = {
+  productName?: string | null;
+  videoTitle?: string | null;
+};
+
+type ProductDetection = {
+  productName: string;
+  source: 'input' | 'title' | 'captions' | 'none';
+};
+
 // 전체 자막에서 영상 단위 제품명을 1회 탐색한다.
-// 왜 findRegisteredHealthFoodInSentence 를 직접 호출하는지: analyzeSentence 를 쓰면 줄마다 룰/예외/트리거 매칭까지 같이 돌아
-//   메인 루프와 합쳐 자막당 분석이 2회씩 실행되므로, 이름 탐색만 하는 가벼운 함수로 분리해 1차 패스 비용을 정규식 1회로 줄인다.
-// productName 이 외부에서 전달되면 그 값을 우선 사용한다.
+// productName 이 외부에서 전달되면 그 값을 우선 사용하고, 없으면 제목 → 자막 순서로 등록 건기식명을 탐색한다.
 function detectVideoProductName(
   segments: CaptionSegment[],
-  productName: string = ''
-): string {
-  const normalizedProductName = productName.trim();
+  contextOrProductName: ScanContext | string = {}
+): ProductDetection {
+  const context: ScanContext =
+    typeof contextOrProductName === 'string'
+      ? { productName: contextOrProductName }
+      : contextOrProductName;
+  const explicitProductName = context.productName?.trim();
 
-  if (normalizedProductName) {
-    return normalizedProductName;
+  if (explicitProductName) {
+    return { productName: explicitProductName, source: 'input' };
+  }
+
+  const titleProductName = findRegisteredHealthFoodInSentence(
+    context.videoTitle ?? ''
+  );
+  if (titleProductName) {
+    return { productName: titleProductName, source: 'title' };
   }
 
   // 가장 먼저 등장한 등록 건기식 이름을 영상 단위 제품명으로 채택 (보통 인트로/타이틀에 한 번 노출되는 패턴 기준)
   for (const seg of segments) {
     const found = findRegisteredHealthFoodInSentence(seg.text);
-    if (found) return found;
+    if (found) return { productName: found, source: 'captions' };
   }
 
-  return '';
+  return { productName: '', source: 'none' };
 }
 
 // 무엇이 들어가 → 처리 → 무엇이 반환되는지:
-//   segments(자막 줄 배열), productName(선택) → 전체 자막에서 영상 단위 제품명 탐색
+//   segments(자막 줄 배열), context(선택) → 제목/전체 자막에서 영상 단위 제품명 탐색
 //   → 줄마다 analyzeSentence(text, detectedProductName) 1회
 //   → ScannedLine[] (입력과 1:1, 순서 유지)
-//   productName 이 외부에서 전달되면 그 값을 우선 사용한다.
-//   productName 이 없으면 전체 자막에서 건기식 DB 제품명 포함 여부를 먼저 탐색한다.
 export function scanCaptions(
   segments: CaptionSegment[],
-  productName: string = ''
+  context: ScanContext | string = {}
 ): ScannedLine[] {
-  const detectedProductName = detectVideoProductName(segments, productName);
+  const detected = detectVideoProductName(segments, context);
 
   // 🟢 스캔 진입 — 입력 줄 수와 제품명 탐색 결과를 먼저 찍어 흐름을 확인할 수 있게 함
   console.log(
     TAG,
     `🟢 룰 스캔 시작 - 자막 ${segments.length}줄 (줄=문장 단위로 엔진 실행) / 건기식 제품명: ${
-      detectedProductName || '미탐지'
+      detected.productName || '미탐지'
     }`
   );
+  if (detected.productName) {
+    console.log(
+      TAG,
+      `🟢 건기식 제품명 감지(${detected.source}): ${detected.productName}`
+    );
+  }
 
   // map: 줄 N개 → 결과 N개. 줄 누락/병합 없이 1:1 유지해야 타임라인 대응이 단순함
   // detectedProductName 을 모든 줄에 넘겨, 제품명이 한 번만 등장하고 이후 줄에서 생략되어도
   // 건기식 분기(1.4 제외, 1.1/1.2 URL 안내)가 일관되게 적용되도록 한다.
   const lines = segments.map((seg) => {
-    const result = analyzeSentence(seg.text, detectedProductName);
+    const result = analyzeSentence(seg.text, detected.productName);
 
     // 정상이 아닌 줄만 "왜 걸렸는지" 근거를 남긴다 (정상까지 찍으면 콘솔이 시끄러워 디버깅 방해)
     if (result.finalStatus === 'Rule-Positive') {

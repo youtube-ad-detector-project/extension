@@ -1,7 +1,8 @@
 // 보고서 조립 모듈 — 룰/모델 결과를 "사용자용 최종 보고서 JSON"으로 변환하는 순수함수.
 //   호출 흐름: tabs/report3.tsx 가 scanCaptions+attachModelResult 로 만든 merged 와 calculateVideoRisk 결과를 넘김 →
-//   여기서 prompts/llm-text.md 의 출력 스펙대로 FinalReport 를 조립 → report3 가 그대로 렌더.
-//   왜 LLM 없이 코드로: 점수·법령·근거가 이미 엔진/사전에 다 있어, LLM 은 환각·비용만 더한다 (명세서는 llm-text.md).
+//   여기서 FinalReport 를 코드 템플릿으로 조립 → report3 가 그대로 렌더.
+//   왜 LLM 없이 코드로: 점수·법령·근거가 이미 엔진/사전에 다 있어, LLM 은 기본 보고서 생성에 쓰지 않는다.
+//   prompts/llm-text.md 는 필요할 때만 완성된 보고서 문장을 부드럽게 다듬는 선택 옵션용 가드레일이다.
 //   네트워크/chrome.* 의존 없는 in→out 순수함수 (matchingEngine 과 같은 결).
 
 import type { ScannedLine, VideoRisk } from "./adScan"
@@ -11,7 +12,7 @@ import type {
   UserFacingDecision
 } from "./matchingEngine"
 
-// llm-text.md 출력 JSON 스펙을 타입으로 고정 — 빌더 출력과 report3 렌더가 같은 모양을 공유한다.
+// 코드 템플릿이 만드는 최종 보고서 JSON 스펙 — 빌더 출력과 report3 렌더가 같은 모양을 공유한다.
 export type DetectedReason = {
   source: "rule" | "trigger"
   type: string // 탐지 유형명 (rule=subCategory / trigger=categoryName)
@@ -37,6 +38,7 @@ export type SentenceReport = {
   triggerExplanation: string | null
   modelExplanation: string | null
   healthFoodExplanation: string | null
+  healthFoodVerificationUrl: string | null
   appliedExceptions: AppliedException[]
 }
 
@@ -52,7 +54,7 @@ export type FinalReport = {
   overallCaution: string
 }
 
-// 고정 주의 문구 — llm-text.md 가 단정 표현을 막으려고 못박은 문장을 그대로 상수화 (LLM 이 바꾸지 못하게)
+// 고정 주의 문구 — 단정 표현 방지 문구를 코드 상수로 고정해 기본 보고서에서 흔들리지 않게 한다.
 const VIDEO_RISK_CAUTION =
   "이 점수는 실제 위법 확률이 아니라 자동 탐지 기준상의 위험 신호 점수입니다."
 const OVERALL_CAUTION =
@@ -64,7 +66,7 @@ function buildVideoSummary(vr: VideoRisk): string {
   if (vr.riskGrade === "표시 없음") {
     return "현재 탐지 기준상 뚜렷한 위법 의심 신호가 감지되지 않았습니다."
   }
-  return `자동 탐지 위험도 ${vr.riskScore}점(${vr.riskGrade}). 의심 문장 ${vr.suspiciousSentenceCount}개, 최고 문장 위험도 ${vr.maxSentenceRiskPercent}%.`
+  return `자동 탐지 위험도 ${vr.riskScore}점(${vr.riskGrade}). 의심 문장 ${vr.suspiciousSentenceCount}개, 최고 문장 위험도 ${vr.maxSentenceRiskPercent}점.`
 }
 
 // rule/trigger hit 을 근거 항목으로 평탄화 — rule 은 직접 근거(legalBasis), trigger 는 후보(candidate)로 분리
@@ -114,11 +116,16 @@ function buildTriggerExplanation(r: AnalysisResult): string | null {
   return `트리거 신호(${names})가 감지되어 모델 추가 검증 대상이 되었습니다. 트리거는 위반 확정 근거가 아니라 의심 신호입니다.`
 }
 
+function formatConfidence(confidence: number): string {
+  if (!Number.isFinite(confidence)) return "0"
+  return String(Math.round(confidence * 10000) / 10000)
+}
+
 // 모델 결과가 합쳐진 경우(attachModelResult 거침)만 설명, 아니면 null
 function buildModelExplanation(r: AnalysisResult): string | null {
   const m = r.modelResult
   if (!m) return null
-  return `AI 분류 모델 예측: ${m.predictionLabel} (신뢰도 ${(m.confidence * 100).toFixed(1)}%). 이는 법적 판단이 아니라 모델의 자동 예측 결과입니다.`
+  return `AI 분류 모델 예측: ${m.predictionLabel} (신뢰도 ${formatConfidence(m.confidence)}). 이는 법적 판단이 아니라 모델의 자동 예측 결과입니다.`
 }
 
 // 문장 1개 → 보고서 항목 — 점수/판정/근거/예외를 엔진이 만든 값에서 그대로 옮긴다 (새 판단 안 함)
@@ -134,6 +141,7 @@ function buildSentenceReport(r: AnalysisResult): SentenceReport {
     modelExplanation: buildModelExplanation(r),
     // 건기식 안내는 엔진이 이미 한국어 문구로 만들어 두었으므로 그대로 사용
     healthFoodExplanation: r.warningMessage,
+    healthFoodVerificationUrl: r.verificationUrl,
     appliedExceptions: (r.ruleAnalysis?.exceptionsHit ?? []).map((e) => ({
       exceptionType: e.subCategory,
       explanation: `예외 규칙 '${e.subCategory}'에 해당해 해당 근거가 위반 점수에서 제외되었습니다.`
@@ -142,7 +150,7 @@ function buildSentenceReport(r: AnalysisResult): SentenceReport {
 }
 
 // 최종 보고서 조립 — 무엇이 들어가 → 처리 → 무엇이 반환:
-//   merged(모델 결과까지 합쳐진 전체 줄), videoRisk(영상 점수) → FinalReport(llm-text.md 출력 스펙)
+//   merged(모델 결과까지 합쳐진 전체 줄), videoRisk(영상 점수) → FinalReport
 //   sentenceReports 는 위반·의심만 (정상 줄은 근거가 비어 정보량 0). videoRisk 는 호출부에서 전체로 계산해 넘김.
 export function buildFinalReport(
   merged: ScannedLine[],
