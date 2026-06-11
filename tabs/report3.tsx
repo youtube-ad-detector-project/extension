@@ -1,12 +1,8 @@
-// 광고 표현 검토 결과 — 확장 내부 탭 (Plasmo 가 tabs/report3.tsx → tabs/report3.html 로 빌드).
-//   호출 흐름: 오버레이 ViolationPanel 의 "보고서 자세히 보기"
-//     → background 가 chrome.tabs.create("tabs/report3.html?v=<영상ID>")
-//     → 이 페이지가 ?v= 로 영상ID 를 받아 storage 자막을 읽고 룰 스캔(1차) 재실행 →
-//       위반·의심 문장을 /api/classify 로 정밀 검사 → 결과를 엔진에 합쳐(attachModelResult) 위험도 재계산 →
-//       영상 위험도(calculateVideoRisk) + 보고서 조립(buildFinalReport) → 렌더.
-//   왜 report/report2 와 분리: 1차=룰 근거, 2차=모델 동작, 3차=점수·법령·모델 결과를 합친 사용자용 화면.
+// 최종 사용자용 분석 리포트.
+// 첫 화면은 60~70대 이상 사용자도 바로 이해할 수 있게 결론과 주의 신호를 크게 보여주고,
+// 문장별 상세 카드에는 룰 근거·법률·트리거·모델 결과·모델 신뢰도를 빠짐없이 담는다.
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react"
 
 import { calculateVideoRisk, scanCaptions, type ScannedLine } from "~lib/adScan"
 import { attachModelResult } from "~lib/matchingEngine"
@@ -16,74 +12,193 @@ import {
   type FinalReport,
   type SentenceReport
 } from "~lib/reportBuilder"
-import { formatTime, STATUS_VIEW } from "~lib/scanView"
+import { formatTime } from "~lib/scanView"
 import { getStoredCaption } from "~lib/storage"
 
-// 서버 주소 — report2 와 동일 (확장 페이지는 host_permissions 로 cross-origin 호출 가능)
 const SERVER = "http://localhost:3000"
 
 type StoredEntry = Awaited<ReturnType<typeof getStoredCaption>>
 
-// 페이지 단계 — 자막→룰→AI→조립이 비동기라 명시적 전이로 관리
-//   ready 에 flagged 를 같이 둠: 보고서 항목(sentenceReports)과 1:1 순서라 타임스탬프 점프 링크에 zip
 type ViewState =
   | { phase: "loading"; message: string }
   | { phase: "problem"; message: string }
   | { phase: "ready"; videoId: string; report: FinalReport; flagged: ScannedLine[] }
 
+type Tone = {
+  accent: string
+  accentDeep: string
+  soft: string
+  border: string
+}
+
 function getVideoIdFromQuery(): string | null {
   return new URLSearchParams(window.location.search).get("v")
 }
 
-// 위험 등급 → 배너 색 (요약 가독성용). 표시 없음/낮음은 차분한 색, 중간/높음은 경고색
-function gradeColor(grade: FinalReport["videoRiskSummary"]["riskGrade"]): string {
-  if (grade === "높음") return "#e5484d"
-  if (grade === "중간") return "#f5a623"
-  if (grade === "낮음") return "#b8860b"
-  return "#1f7a34"
+function riskTone(grade: FinalReport["videoRiskSummary"]["riskGrade"]): Tone {
+  if (grade === "높음") {
+    return {
+      accent: "#d92f40",
+      accentDeep: "#8f1e29",
+      soft: "#fff8f8",
+      border: "#f0d7dc"
+    }
+  }
+  if (grade === "중간") {
+    return {
+      accent: "#b66b16",
+      accentDeep: "#70420f",
+      soft: "#fff9f0",
+      border: "#eadbbf"
+    }
+  }
+  if (grade === "낮음") {
+    return {
+      accent: "#8f641e",
+      accentDeep: "#594014",
+      soft: "#fffaf1",
+      border: "#e6dcc2"
+    }
+  }
+  return {
+    accent: "#24885a",
+    accentDeep: "#16633f",
+    soft: "#f3fbf7",
+    border: "#d7eadf"
+  }
+}
+
+function reportHeadline(vrs: FinalReport["videoRiskSummary"]): string {
+  if (vrs.riskScore > 0) return "구매 전 확인이 필요해요"
+  return "크게 걸리는 표현은 적어요"
+}
+
+function reportLead(
+  vrs: FinalReport["videoRiskSummary"],
+  sentenceCount: number
+): ReactNode {
+  if (vrs.riskScore > 0) {
+    return `이 광고에서 구매 판단에 영향을 줄 수 있는 표현 ${sentenceCount}개를 찾았습니다.`
+  }
+  return "현재 기준에서는 구매 판단을 크게 흔들 만한 표현이 적게 나타났습니다."
+}
+
+function formatConfidence(confidence: number): string {
+  if (!Number.isFinite(confidence)) return "0"
+  return String(Math.round(confidence * 10000) / 10000)
+}
+
+function displaySignalScore(score: number): number {
+  const normalized = Math.max(0, Math.min(100, Math.round(score)))
+  if (normalized === 0) return 0
+  if (normalized < 40) return 28
+  if (normalized < 70) return 54
+  if (normalized < 85) return 76
+  return 92
+}
+
+function displaySignalLevel(score: number): string {
+  const normalized = Math.max(0, Math.min(100, Math.round(score)))
+  if (normalized === 0) return "표시 없음"
+  if (normalized < 40) return "낮음"
+  if (normalized < 70) return "보통"
+  if (normalized < 85) return "높음"
+  return "매우 높음"
+}
+
+function unique(items: string[]): string[] {
+  return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)))
+}
+
+function joinItems(items: string[], fallback = "해당 정보 없음"): string {
+  const values = unique(items)
+  return values.length > 0 ? values.join(", ") : fallback
+}
+
+function firstNonEmpty(items: Array<string | null | undefined>): string {
+  return items.map((item) => item?.trim()).find(Boolean) ?? ""
+}
+
+function sentenceTone(report: SentenceReport): Tone {
+  if (report.finalStatus === "Rule-Positive") return riskTone("높음")
+  if (report.modelInspection?.isViolation) return riskTone("높음")
+  if (report.finalStatus === "Route-to-Model") return riskTone("중간")
+  return riskTone("표시 없음")
+}
+
+function sentenceResultLabel(report: SentenceReport): string {
+  if (report.finalStatus === "Rule-Positive") return "주의 표현"
+  if (report.modelInspection) {
+    return report.modelInspection.isViolation ? "주의 표현" : "확인 필요"
+  }
+  if (report.finalStatus === "Route-to-Model") return "확인 필요"
+  return "참고"
+}
+
+function isCautionExpression(report: SentenceReport): boolean {
+  return (
+    report.finalStatus === "Rule-Positive" ||
+    report.modelInspection?.isViolation === true
+  )
+}
+
+function closeReport() {
+  if (window.history.length > 1) {
+    window.history.back()
+    return
+  }
+  window.close()
 }
 
 function Report3() {
   const [state, setState] = useState<ViewState>({
     phase: "loading",
-    message: "자막을 불러오는 중…"
+    message: "광고 표현을 정리하고 있습니다."
   })
 
-  // 마운트 시 1회: ?v= → storage → 룰 재스캔 → flagged → /api/classify → 머지 → 영상위험도 → 보고서 조립
   useEffect(() => {
     const videoId = getVideoIdFromQuery()
     if (!videoId) {
-      setState({ phase: "problem", message: "영상 ID(?v=)가 없습니다." })
+      setState({ phase: "problem", message: "영상 ID가 없어 보고서를 열 수 없습니다." })
       return
     }
 
     void (async () => {
       const entry: StoredEntry | null = await getStoredCaption(videoId)
-      // 성공 자막이 아니면 분석 입력이 없으므로 사유만 표기 (report2 와 동일한 가드)
       if (!entry) {
-        setState({ phase: "problem", message: `영상 ${videoId} 의 저장된 자막이 없습니다.` })
+        setState({
+          phase: "problem",
+          message: `영상 ${videoId}의 저장된 자막이 없습니다.`
+        })
         return
       }
       if (entry.ok === "pending") {
-        setState({ phase: "problem", message: `자막 추출이 진행 중입니다 (${entry.data.stage}).` })
+        setState({
+          phase: "problem",
+          message: `자막 추출이 아직 진행 중입니다. 현재 단계: ${entry.data.stage}`
+        })
         return
       }
       if (entry.ok === false) {
-        setState({ phase: "problem", message: `자막 추출 실패: ${entry.data.reason}` })
+        setState({
+          phase: "problem",
+          message: `자막 추출에 실패했습니다: ${entry.data.reason}`
+        })
         return
       }
 
-      // 성공 자막 → 룰 재스캔 → 위반·의심만 추림 (AI 검증 대상)
       const scanned = scanCaptions(entry.data.segments, {
         productName: entry.data.productName,
         videoTitle: entry.data.videoTitle
       })
       const flaggedLines = scanned.filter((l) => l.status !== "Rule-Negative")
 
-      // 위반·의심이 0건이면 classify 생략 → merged=scanned (영상 위험도는 '표시 없음'으로 단락)
       let merged = scanned
       if (flaggedLines.length > 0) {
-        setState({ phase: "loading", message: `정밀 검사 중… (${flaggedLines.length}문장)` })
+        setState({
+          phase: "loading",
+          message: `정밀 검사를 진행하고 있습니다. ${flaggedLines.length}문장을 확인 중입니다.`
+        })
         try {
           const res = await fetch(`${SERVER}/api/classify`, {
             method: "POST",
@@ -91,149 +206,185 @@ function Report3() {
             body: JSON.stringify({ texts: flaggedLines.map((l) => l.text) })
           })
           if (!res.ok) {
-            const body = (await res.json().catch(() => null)) as { error?: string } | null
+            const body = (await res.json().catch(() => null)) as
+              | { error?: string }
+              | null
             throw new Error(body?.error ?? `http ${res.status}`)
           }
           const data = (await res.json()) as { results: ClassifyVerdict[] }
-          // flagged 와 results 는 입력 순서가 같아 "flagged 내 인덱스 f"로 zip.
-          //   flagged 줄에만 verdict 를 합쳐(attachModelResult) sentenceRisk/userFacingDecision 재계산.
+
           let f = 0
           merged = scanned.map((l) => {
             if (l.status === "Rule-Negative") return l
             const result = attachModelResult(l.result, data.results[f++])
-            // 모델 병합으로 finalStatus 가 바뀔 수 있어(Route→판정) status 도 같이 갱신
             return { ...l, status: result.finalStatus, result }
           })
         } catch (e) {
           const reason = e instanceof Error ? e.message : String(e)
           setState({
             phase: "problem",
-            message: `정밀 검사 실패: ${reason} (infer 서버 :8000 / Next :3000 켜졌는지 확인)`
+            message: `정밀 검사에 실패했습니다: ${reason}`
           })
           return
         }
       }
 
-      // 영상 위험도는 반드시 merged 전체로 — Route-to-Model 은 병합 후에야 riskScore 가 채워짐
       const videoRisk = calculateVideoRisk(merged)
       const report = buildFinalReport(merged, videoRisk)
-      // sentenceReports 와 같은 필터(=위반·의심)로 flagged 를 만들어 인덱스 zip 의 정합 보장
       const flagged = merged.filter((l) => l.status !== "Rule-Negative")
       setState({ phase: "ready", videoId, report, flagged })
     })()
   }, [])
 
-  if (state.phase === "loading") return <Shell>{state.message}</Shell>
-  if (state.phase === "problem") return <Shell>{state.message}</Shell>
+  if (state.phase === "loading") {
+    return (
+      <Shell>
+        <StatusMessage>{state.message}</StatusMessage>
+      </Shell>
+    )
+  }
+  if (state.phase === "problem") {
+    return (
+      <Shell>
+        <StatusMessage>{state.message}</StatusMessage>
+      </Shell>
+    )
+  }
 
   const { videoId, report, flagged } = state
   const vrs = report.videoRiskSummary
-  const modelSummary = report.modelInspectionSummary
+  const tone = riskTone(vrs.riskGrade)
+  const signalScore = displaySignalScore(vrs.riskScore)
+  const signalLevel = displaySignalLevel(vrs.riskScore)
+  const cautionExpressionCount = report.sentenceReports.filter(
+    isCautionExpression
+  ).length
 
   return (
     <Shell>
-      <section style={styles.hero}>
-        <h1 style={styles.h1}>광고 표현 검토 결과</h1>
-        <p style={styles.meta}>
-          영상{" "}
-          <a
-            style={styles.link}
-            href={`https://www.youtube.com/watch?v=${videoId}`}
-            target="_blank"
-            rel="noreferrer">
-            {videoId}
-          </a>{" "}
-          · 확인 문장 {report.sentenceReports.length}건
-        </p>
+      <header style={styles.topbar}>
+        <button
+          type="button"
+          onClick={closeReport}
+          style={styles.backButton}
+          aria-label="뒤로가기">
+          ‹
+        </button>
+        <h1 style={styles.pageTitle}>광고 표현 분석</h1>
+        <span style={styles.countBadge}>
+          {report.sentenceReports.length}문장
+        </span>
+      </header>
 
-        {/* 첫 화면 요약 — 사용자가 먼저 봐야 하는 핵심 지표만 숫자 카드로 모은다. */}
-        <section style={styles.metricGrid}>
-          <Metric
-            label="종합 위험도"
-            value={`${vrs.riskScore}점`}
-            sub={vrs.riskGrade}
-            color={gradeColor(vrs.riskGrade)}
-          />
-          <Metric
-            label="확인 문장 수"
-            value={`${report.sentenceReports.length}문장`}
-            sub="룰·트리거 기준"
-          />
-          <Metric
-            label="정밀 검사 결과"
-            value={modelSummary.resultText}
-            sub={`${modelSummary.inspectedSentenceCount}문장 검사`}
-          />
-          <Metric
-            label="평균 신뢰도"
-            value={modelSummary.averageConfidenceText}
-            sub="모델 결과 기준"
-          />
-        </section>
-
-        {/* 영상 단위 요약 — 계산된 위험도와 주의 문구만 노출 */}
-        <section style={{ ...styles.summary, borderLeft: `5px solid ${gradeColor(vrs.riskGrade)}` }}>
-          <div style={styles.summaryHead}>
-            <span style={{ ...styles.grade, color: gradeColor(vrs.riskGrade) }}>
-              {vrs.riskGrade}
-            </span>
-            <span style={styles.score}>종합 위험도 {vrs.riskScore}점</span>
-            <span style={styles.levelText}>{vrs.riskLevelText}</span>
+      <main style={styles.main}>
+        <section
+          style={{
+            ...styles.alertCard,
+            background: "#ffffff",
+            borderColor: "#edf0f4"
+          }}>
+          <div
+            style={{
+              ...styles.alertIcon,
+              background: tone.soft,
+              borderColor: tone.border,
+              color: tone.accent
+            }}>
+            주의
           </div>
-          <p style={styles.summaryText}>{vrs.summary}</p>
-          <p style={styles.caution}>{vrs.caution}</p>
+          <div>
+            <h2 style={{ ...styles.alertTitle, color: tone.accentDeep }}>
+              {reportHeadline(vrs)}
+            </h2>
+            <p style={styles.alertCopy}>
+              {reportLead(vrs, report.sentenceReports.length)}
+            </p>
+          </div>
         </section>
-      </section>
 
-      {/* 문장별 근거 — 기본은 닫힌 요약, 사용자가 원할 때만 자세한 근거를 펼친다. */}
-      {report.sentenceReports.length === 0 ? (
-        <p style={styles.meta}>위반·의심으로 분류된 문장이 없습니다.</p>
-      ) : (
-        report.sentenceReports.map((sr, i) => (
-          <SentenceCard
-            key={i}
-            videoId={videoId}
-            start={flagged[i]?.start ?? 0}
-            report={sr}
-          />
-        ))
-      )}
+        <section style={styles.riskCard}>
+          <div style={styles.riskHead}>
+            <div style={styles.riskLabel}>주의 신호</div>
+            <div style={styles.riskValue}>
+              <span style={{ ...styles.percent, color: tone.accent }}>
+                {signalScore}
+              </span>
+              <span
+                style={{
+                  ...styles.riskPill,
+                  color: tone.accent,
+                  borderColor: tone.border,
+                  background: tone.soft
+                }}>
+                {signalLevel}
+              </span>
+            </div>
+          </div>
+          <div style={styles.barTrack}>
+            <div
+              style={{
+                ...styles.barFill,
+                width: `${signalScore}%`,
+                background: tone.accent
+              }}
+            />
+          </div>
+          <p style={styles.summaryText}>
+            높게 나왔다면, 구매 전에 한 번 더 확인해 보세요.
+          </p>
+          <div style={styles.quickStats}>
+            <Stat label="확인 문장" value={`${report.sentenceReports.length}개`} />
+            <Stat
+              label="정밀 확인"
+              value={`${report.modelInspectionSummary.inspectedSentenceCount}개`}
+            />
+            <Stat label="주의 표현" value={`${cautionExpressionCount}개`} />
+          </div>
+        </section>
 
-      <p style={styles.overall}>{report.overallCaution}</p>
+        <SectionTitle>확인된 문장</SectionTitle>
+        {report.sentenceReports.length === 0 ? (
+          <p style={styles.emptyText}>검토가 필요한 문장이 없습니다.</p>
+        ) : (
+          report.sentenceReports.map((sr, i) => (
+            <SentenceCard
+              key={`${sr.sentence}-${i}`}
+              videoId={videoId}
+              start={flagged[i]?.start ?? 0}
+              report={sr}
+            />
+          ))
+        )}
+
+        <SectionTitle>요약</SectionTitle>
+        <section style={styles.summaryBox}>
+          <p style={styles.summaryBody}>
+            검토가 필요한 표현 {report.sentenceReports.length}개를 정리했습니다.
+            정밀 검사를 거친 문장은{" "}
+            {report.modelInspectionSummary.inspectedSentenceCount}개, 주의 표현으로
+            확인된 문장은 {cautionExpressionCount}개입니다.
+          </p>
+        </section>
+
+        <SectionTitle>구매 전 확인</SectionTitle>
+        <Notice>
+          질병 치료·완치를 직접 약속하는 광고 표현은 신중히 확인하세요.
+        </Notice>
+        <Notice>
+          후기나 영상 표현보다 제품의 공식 표시 정보를 먼저 확인하세요.
+        </Notice>
+        <p style={styles.overall}>{report.overallCaution}</p>
+      </main>
+
+      <footer style={styles.footer}>
+        <button type="button" onClick={closeReport} style={styles.footerButton}>
+          돌아가기
+        </button>
+      </footer>
     </Shell>
   )
 }
 
-function Metric({
-  label,
-  value,
-  sub,
-  color
-}: {
-  label: string
-  value: string
-  sub: string
-  color?: string
-}) {
-  return (
-    <div style={styles.metric}>
-      <div style={styles.metricLabel}>{label}</div>
-      <div style={{ ...styles.metricValue, ...(color ? { color } : {}) }}>{value}</div>
-      <div style={styles.metricSub}>{sub}</div>
-    </div>
-  )
-}
-
-function formatList(items: string[], emptyText: string): string {
-  return items.length > 0 ? items.join(", ") : emptyText
-}
-
-function modelVerdictText(report: SentenceReport): string {
-  if (!report.modelInspection) return "검사 결과 없음"
-  return report.modelInspection.isViolation ? "위법 의심" : "추가 의심 낮음"
-}
-
-// 문장 1개 요약 카드 — 기본은 핵심 판정만 보이고, 상세 근거는 사용자가 펼칠 때만 렌더한다.
 function SentenceCard({
   videoId,
   start,
@@ -243,83 +394,132 @@ function SentenceCard({
   start: number
   report: SentenceReport
 }) {
-  const [open, setOpen] = useState(false)
-  const statusView = STATUS_VIEW[report.finalStatus]
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const tone = sentenceTone(report)
   const sec = Math.floor(start)
-  const modelInspection = report.modelInspection
+  const ruleReasons = report.detectedReasons.filter((r) => r.source === "rule")
+  const triggerReasons = report.detectedReasons.filter(
+    (r) => r.source === "trigger"
+  )
+  const ruleLegalBasis = unique(ruleReasons.flatMap((r) => r.legalBasis))
+  const triggerLegalBasis = unique(
+    triggerReasons.flatMap((r) => r.relatedLegalBasisCandidates)
+  )
+  const safeHarborReferences = unique(
+    report.detectedReasons.flatMap((r) => r.safeHarborReferences)
+  )
+  const allTypes = unique(report.detectedReasons.map((r) => r.type))
+  const summaryReason = firstNonEmpty([
+    ruleReasons[0]?.explanation,
+    report.modelInspection?.explanation,
+    report.triggerExplanation,
+    triggerReasons[0]?.explanation,
+    "추가 확인이 필요한 표현입니다."
+  ])
 
   return (
-    <section style={{ ...styles.card, borderLeft: `4px solid ${statusView.color}` }}>
-      {/* 헤더: 타임스탬프(영상 점프) + 문장 + 사용자용 판정 */}
-      <div style={styles.cardHead}>
+    <article style={{ ...styles.sentenceCard, borderColor: "#edf0f4" }}>
+      <div style={styles.cardTopRow}>
+        <span
+          style={{
+            ...styles.sentenceBadge,
+            color: tone.accent,
+            background: tone.soft,
+            borderColor: tone.border
+          }}>
+          {sentenceResultLabel(report)}
+        </span>
         <a
-          style={styles.ts}
+          style={styles.timeLink}
           href={`https://www.youtube.com/watch?v=${videoId}&t=${sec}s`}
           target="_blank"
           rel="noreferrer">
           {formatTime(start)}
         </a>
-        <span style={styles.lineText}>{report.sentence}</span>
       </div>
 
-      {/* 판정 요약: 사용자용 결정 + 문장 위험도 % */}
-      <div style={styles.decisionRow}>
-        <span style={{ ...styles.decision, color: statusView.color }}>
-          {report.userFacingDecision}
-        </span>
-        <span style={styles.riskPct}>위험도 {report.sentenceRiskPercent}%</span>
-        {modelInspection && (
-          <span style={styles.statusTag}>
-            정밀 검사 {modelInspection.confidencePercent}%
-          </span>
-        )}
+      <p style={styles.quote}>“{report.sentence}”</p>
+
+      <div style={styles.cardSummary}>
+        <SummaryItem label="유형">{joinItems(allTypes)}</SummaryItem>
+        <SummaryItem label="이유">{summaryReason}</SummaryItem>
       </div>
-      <p style={styles.plainConclusion}>{report.plainConclusion}</p>
 
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        style={styles.detailButton}
-        aria-expanded={open}>
-        {open ? "근거 접기" : "근거 자세히 보기"}
+        onClick={() => setDetailsOpen((open) => !open)}
+        style={{
+          ...styles.detailButton,
+          color: "#2f3847",
+          background: "#f7f8fb",
+          borderColor: "#edf0f4"
+        }}
+        aria-expanded={detailsOpen}>
+        {detailsOpen ? "접기" : "근거 자세히 보기"}
       </button>
 
-      {open && (
-        <div style={styles.detail}>
-          <DetailRow label="근거 문장">{report.sentence}</DetailRow>
-          <DetailRow label="위법 유형">
-            {formatList(report.violationTypes, "직접 위반 룰 없음")}
-          </DetailRow>
-          <DetailRow label="판단 이유">
-            <p style={styles.detailText}>{report.riskExplanation}</p>
-            {report.detectedReasons.map((reason, i) => (
-              <ReasonRow key={i} reason={reason} />
-            ))}
-          </DetailRow>
-          <DetailRow label="관련 법률">
-            <LegalList label="직접 근거" items={report.directLegalBasis} />
-            <LegalList label="관련 후보" items={report.relatedLegalBasisCandidates} />
-            {report.directLegalBasis.length === 0 &&
-              report.relatedLegalBasisCandidates.length === 0 && (
-                <span style={styles.emptyText}>표시할 법률 근거 없음</span>
-              )}
-          </DetailRow>
-          <DetailRow label="트리거 유형">
-            {formatList(report.triggerTypes, "트리거 없음")}
-          </DetailRow>
-          <DetailRow label="모델 검사 결과">{modelVerdictText(report)}</DetailRow>
-          <DetailRow label="모델 신뢰도">
-            {modelInspection ? `${modelInspection.confidencePercent}%` : "검사 결과 없음"}
-          </DetailRow>
+      {detailsOpen && (
+        <div style={styles.detailsPanel}>
+          <DetailRow label="근거 문장 전문">{report.sentence}</DetailRow>
 
-          {report.triggerExplanation && (
-            <p style={styles.sub}>{report.triggerExplanation}</p>
+          {ruleReasons.length > 0 && (
+            <>
+              <DetailRow label="감지된 명시적 위법 유형">
+                {joinItems(ruleReasons.map((r) => r.type))}
+              </DetailRow>
+              <DetailRow label="문장 안에서 감지된 표현">
+                {joinItems(ruleReasons.map((r) => r.evidenceText))}
+              </DetailRow>
+              <DetailRow label="위법 가능성이 높다고 본 이유">
+                {joinItems(
+                  ruleReasons.map((r) => r.explanation),
+                  "사전 룰에 의해 주의가 필요한 표현으로 분류되었습니다."
+                )}
+              </DetailRow>
+              <DetailRow label="연결되는 근거 법률">
+                <TextList
+                  items={ruleLegalBasis}
+                  empty="연결된 법률 정보가 없습니다."
+                />
+              </DetailRow>
+            </>
           )}
-          {report.modelExplanation && (
-            <p style={styles.sub}>{report.modelExplanation}</p>
+
+          {triggerReasons.length > 0 && (
+            <>
+              <DetailRow label="모델로 보낸 트리거 유형">
+                {joinItems(triggerReasons.map((r) => r.type))}
+              </DetailRow>
+              <DetailRow label="모델 검사가 필요하다고 본 이유">
+                {report.triggerExplanation ??
+                  joinItems(triggerReasons.map((r) => r.explanation))}
+              </DetailRow>
+              <DetailRow label="문장 안에서 감지된 표현">
+                {joinItems(triggerReasons.map((r) => r.evidenceText))}
+              </DetailRow>
+              <DetailRow label="관련 법률">
+                <TextList
+                  items={triggerLegalBasis}
+                  empty="연결된 법률 후보 정보가 없습니다."
+                />
+              </DetailRow>
+            </>
           )}
+
+          {report.modelInspection && (
+            <>
+              <DetailRow label="모델 검사 결과">
+                검사 결과는 “{report.modelInspection.resultLabel}”입니다.{" "}
+                {report.modelInspection.explanation}
+              </DetailRow>
+              <DetailRow label="모델 신뢰도">
+                {formatConfidence(report.modelInspection.confidence)}
+              </DetailRow>
+            </>
+          )}
+
           {report.healthFoodExplanation && (
-            <p style={styles.sub}>
+            <DetailRow label="제품 확인 안내">
               {report.healthFoodExplanation}
               {report.healthFoodVerificationUrl && (
                 <>
@@ -329,27 +529,51 @@ function SentenceCard({
                     href={report.healthFoodVerificationUrl}
                     target="_blank"
                     rel="noreferrer">
-                    확인하기
+                    제품 정보 확인
                   </a>
                 </>
               )}
-            </p>
+            </DetailRow>
+          )}
+
+          {safeHarborReferences.length > 0 && (
+            <DetailRow label="합법 예외 참고">
+              <TextList items={safeHarborReferences} />
+            </DetailRow>
           )}
 
           {report.appliedExceptions.length > 0 && (
-            <div style={styles.block}>
-              <div style={styles.blockTitle}>적용된 예외</div>
-              {report.appliedExceptions.map((e, i) => (
-                <p key={i} style={styles.sub}>
-                  {e.exceptionType}: {e.explanation}
-                </p>
-              ))}
-            </div>
+            <DetailRow label="적용된 예외">
+              <TextList
+                items={report.appliedExceptions.map(
+                  (e) => `${e.exceptionType}: ${e.explanation}`
+                )}
+              />
+            </DetailRow>
           )}
         </div>
       )}
-    </section>
+    </article>
   )
+}
+
+function SummaryItem({
+  label,
+  children
+}: {
+  label: string
+  children: ReactNode
+}) {
+  return (
+    <div style={styles.summaryItem}>
+      <div style={styles.summaryItemLabel}>{label}</div>
+      <div style={styles.summaryItemValue}>{children}</div>
+    </div>
+  )
+}
+
+function SectionTitle({ children }: { children: ReactNode }) {
+  return <h2 style={styles.sectionTitle}>{children}</h2>
 }
 
 function DetailRow({
@@ -357,7 +581,7 @@ function DetailRow({
   children
 }: {
   label: string
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
     <div style={styles.detailRow}>
@@ -367,212 +591,442 @@ function DetailRow({
   )
 }
 
-// 근거 1개 — 출처(rule/trigger) 배지 + 유형 + 근거 표현 + 설명
-function ReasonRow({ reason }: { reason: SentenceReport["detectedReasons"][number] }) {
-  const isRule = reason.source === "rule"
+function TextList({
+  items,
+  empty = "해당 정보 없음"
+}: {
+  items: string[]
+  empty?: string
+}) {
+  const values = unique(items)
+  if (values.length === 0) return <>{empty}</>
   return (
-    <div style={styles.reason}>
-      <div style={styles.reasonHead}>
-        <span
-          style={{
-            ...styles.srcBadge,
-            background: isRule ? "#fde8e8" : "#fff4e0",
-            color: isRule ? "#e5484d" : "#b8860b"
-          }}>
-          {isRule ? "룰(직접)" : "트리거(후보)"}
-        </span>
-        <span style={styles.reasonType}>{reason.type}</span>
-      </div>
-      <p style={styles.evidence}>“{reason.evidenceText}”</p>
-      {reason.explanation && <p style={styles.reasonExp}>{reason.explanation}</p>}
+    <ul style={styles.textList}>
+      {values.map((item, i) => (
+        <li key={`${item}-${i}`} style={styles.textListItem}>
+          {item}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={styles.stat}>
+      <div style={styles.statLabel}>{label}</div>
+      <div style={styles.statValue}>{value}</div>
     </div>
   )
 }
 
-// 법령 문구 목록 — 비어있으면 렌더 자체를 생략해 계산되지 않은 정보처럼 보이지 않게 한다.
-function LegalList({ label, items }: { label: string; items: string[] }) {
-  if (items.length === 0) return null
+function Notice({ children }: { children: ReactNode }) {
   return (
-    <div style={styles.legalWrap}>
-      <span style={styles.legalLabel}>{label}</span>
-      <ul style={styles.legalUl}>
-        {items.map((t, i) => (
-          <li key={i} style={styles.legalLi}>
-            {t}
-          </li>
-        ))}
-      </ul>
+    <section style={styles.notice}>
+      <div style={styles.noticeIcon}>!</div>
+      <p style={styles.noticeText}>{children}</p>
+    </section>
+  )
+}
+
+function StatusMessage({ children }: { children: ReactNode }) {
+  return (
+    <div style={styles.statusWrap}>
+      <p style={styles.statusText}>{children}</p>
     </div>
   )
 }
 
-// 공통 페이지 골격 — report/report2 와 같은 밝은 톤
-function Shell({ children }: { children: React.ReactNode }) {
+function Shell({ children }: { children: ReactNode }) {
   return <div style={styles.page}>{children}</div>
 }
 
-// 인라인 스타일 — 글이 많아 가독성 우선(밝은 배경/검은 글씨), report2 와 톤 통일
-const styles: Record<string, React.CSSProperties> = {
+const styles: Record<string, CSSProperties> = {
   page: {
-    maxWidth: 1040,
-    margin: "0 auto",
-    padding: "36px 24px 48px",
-    fontFamily:
-      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-    color: "#1a1a1a",
-    fontSize: 14,
-    lineHeight: 1.6,
-    background: "#f6f8fb",
     minHeight: "100vh",
-    boxSizing: "border-box"
+    maxWidth: 520,
+    margin: "0 auto",
+    background: "#f8fafb",
+    color: "#1c2430",
+    fontFamily:
+      '"Noto Sans KR", "Pretendard Variable", Pretendard, "SUIT", -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif',
+    lineHeight: 1.6
   },
-  hero: {
-    background: "#fff",
-    border: "1px solid #dde3ea",
-    borderTop: "6px solid #496f9d",
-    borderRadius: 12,
-    padding: "24px 26px 6px",
-    marginBottom: 20,
-    boxShadow: "0 10px 28px rgba(20, 32, 50, 0.08)"
-  },
-  h1: { fontSize: 28, lineHeight: 1.2, margin: "0 0 8px", letterSpacing: 0 },
-  meta: { color: "#555", margin: "0 0 12px" },
-  link: { color: "#1a73e8", textDecoration: "none" },
-  metricGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-    gap: 10,
-    margin: "18px 0"
-  },
-  metric: {
-    background: "#f9fbfd",
-    border: "1px solid #e4e9f0",
-    borderRadius: 8,
-    padding: "12px 14px",
-    minHeight: 88
-  },
-  metricLabel: { fontSize: 12, color: "#666", marginBottom: 6 },
-  metricValue: { fontSize: 22, fontWeight: 800, color: "#1f2937", lineHeight: 1.2 },
-  metricSub: { fontSize: 12, color: "#777", marginTop: 6 },
-  summary: {
-    background: "#fff",
-    border: "1px solid #e4e9f0",
-    borderRadius: 8,
-    padding: "16px 18px",
-    marginBottom: 18,
-    boxShadow: "none"
-  },
-  summaryHead: { display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" },
-  grade: { fontSize: 20, fontWeight: 800 },
-  score: { fontSize: 15, fontWeight: 700, color: "#333" },
-  levelText: { fontSize: 13, color: "#666" },
-  summaryText: { margin: "8px 0 6px", color: "#333" },
-  caution: { margin: 0, fontSize: 12, color: "#888" },
-  card: {
-    background: "#fff",
-    border: "1px solid #dde3ea",
-    borderRadius: 8,
-    padding: "16px 18px",
-    marginBottom: 14,
-    boxShadow: "0 4px 14px rgba(20, 32, 50, 0.06)"
-  },
-  cardHead: {
+  topbar: {
+    position: "sticky",
+    top: 0,
+    zIndex: 10,
+    height: 74,
     display: "flex",
-    alignItems: "baseline",
-    gap: 10,
-    marginBottom: 10,
-    paddingBottom: 10,
-    borderBottom: "1px solid #edf1f5"
+    alignItems: "center",
+    gap: 12,
+    padding: "15px 20px 10px",
+    background: "rgba(248,250,251,0.9)",
+    borderBottom: "1px solid rgba(232,235,240,0.72)",
+    backdropFilter: "blur(14px)"
   },
-  ts: {
-    color: "#1a73e8",
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-    fontSize: 13,
-    textDecoration: "none",
-    flexShrink: 0
+  backButton: {
+    width: 42,
+    height: 42,
+    border: "1px solid #e8ebf0",
+    borderRadius: 14,
+    background: "#ffffff",
+    color: "#252b36",
+    display: "grid",
+    placeItems: "center",
+    fontSize: 30,
+    lineHeight: 1,
+    cursor: "pointer"
   },
-  lineText: { fontWeight: 700, wordBreak: "break-word", lineHeight: 1.5 },
-  decisionRow: {
+  pageTitle: {
+    margin: 0,
+    fontSize: 21,
+    fontWeight: 800,
+    letterSpacing: 0
+  },
+  countBadge: {
+    marginLeft: "auto",
+    minWidth: 50,
+    height: 28,
+    padding: "0 10px",
+    borderRadius: 999,
+    display: "grid",
+    placeItems: "center",
+    background: "#eff3f7",
+    color: "#475161",
+    fontSize: 12,
+    fontWeight: 700
+  },
+  main: {
+    padding: "16px 18px 104px"
+  },
+  alertCard: {
+    minHeight: 0,
+    border: "1px solid",
+    borderRadius: 28,
+    display: "grid",
+    gridTemplateColumns: "auto 1fr",
+    gap: 16,
+    padding: "24px 20px",
+    boxShadow: "0 18px 44px rgba(31,41,55,0.06)"
+  },
+  alertIcon: {
+    width: 48,
+    height: 28,
+    border: "1px solid",
+    borderRadius: 999,
+    color: "#fff",
+    display: "grid",
+    placeItems: "center",
+    fontSize: 12,
+    fontWeight: 800,
+    alignSelf: "start"
+  },
+  alertTitle: {
+    margin: "0 0 8px",
+    fontSize: 23,
+    lineHeight: 1.3,
+    fontWeight: 800,
+    letterSpacing: 0,
+    wordBreak: "keep-all"
+  },
+  alertCopy: {
+    margin: 0,
+    color: "#667085",
+    fontSize: 16,
+    lineHeight: 1.58,
+    wordBreak: "keep-all"
+  },
+  riskCard: {
+    marginTop: 12,
+    border: "1px solid #edf0f4",
+    borderRadius: 26,
+    padding: "20px",
+    background: "#fff",
+    boxShadow: "0 14px 36px rgba(31,41,55,0.055)"
+  },
+  riskHead: {
+    display: "flex",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 16
+  },
+  riskLabel: {
+    color: "#667085",
+    fontSize: 16,
+    fontWeight: 700
+  },
+  riskValue: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6
+  },
+  percent: {
+    fontSize: 44,
+    lineHeight: 0.95,
+    fontWeight: 800,
+    letterSpacing: 0
+  },
+  percentUnit: {
+    marginLeft: -2,
+    color: "#8a93a3",
+    fontSize: 15,
+    fontWeight: 700
+  },
+  riskPill: {
+    marginLeft: 6,
+    padding: "7px 12px",
+    borderRadius: 999,
+    border: "1px solid",
+    fontSize: 14,
+    fontWeight: 700
+  },
+  barTrack: {
+    height: 10,
+    marginTop: 16,
+    borderRadius: 999,
+    background: "#e7ebf0",
+    overflow: "hidden"
+  },
+  barFill: {
+    height: "100%",
+    borderRadius: 999,
+    background: "#d92f40"
+  },
+  summaryText: {
+    margin: "16px 0 0",
+    color: "#5e6979",
+    fontSize: 15,
+    lineHeight: 1.6,
+    wordBreak: "keep-all"
+  },
+  quickStats: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, 1fr)",
+    gap: 8,
+    marginTop: 14
+  },
+  stat: {
+    minWidth: 0,
+    borderRadius: 16,
+    background: "#f8fafc",
+    border: "1px solid #eef1f5",
+    padding: "11px 10px"
+  },
+  statLabel: {
+    color: "#68707f",
+    fontSize: 12,
+    fontWeight: 700
+  },
+  statValue: {
+    marginTop: 2,
+    color: "#191d26",
+    fontSize: 16,
+    fontWeight: 800
+  },
+  sectionTitle: {
+    margin: "26px 0 12px",
+    fontSize: 19,
+    lineHeight: 1.25,
+    fontWeight: 800,
+    letterSpacing: 0
+  },
+  sentenceCard: {
+    border: "1px solid",
+    borderRadius: 24,
+    padding: "19px",
+    background: "#fff",
+    boxShadow: "0 16px 42px rgba(31,41,55,0.055)",
+    marginBottom: 14
+  },
+  cardTopRow: {
     display: "flex",
     alignItems: "center",
     gap: 10,
-    marginBottom: 6,
-    flexWrap: "wrap"
+    flexWrap: "wrap",
+    marginBottom: 12
   },
-  decision: { fontWeight: 700, fontSize: 15 },
-  riskPct: {
+  sentenceBadge: {
+    padding: "6px 10px",
+    border: "1px solid",
+    borderRadius: 999,
     fontSize: 13,
-    fontWeight: 700,
-    color: "#333",
-    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"
+    fontWeight: 700
   },
-  statusTag: { fontSize: 11, color: "#999" },
-  plainConclusion: {
-    margin: "4px 0 10px",
-    padding: "10px 12px",
-    background: "#f8fbff",
-    border: "1px solid #d8e4f2",
-    borderRadius: 8,
+  timeLink: {
+    marginLeft: "auto",
+    color: "#68707f",
     fontSize: 14,
-    color: "#1f2937"
+    fontWeight: 700,
+    textDecoration: "none"
+  },
+  quote: {
+    margin: "0 0 15px",
+    color: "#171b24",
+    fontSize: 19,
+    lineHeight: 1.42,
+    fontWeight: 800,
+    wordBreak: "keep-all"
+  },
+  cardSummary: {
+    display: "grid",
+    gap: 8,
+    padding: 0,
+    borderTop: "0"
+  },
+  summaryItem: {
+    display: "grid",
+    gap: 4,
+    alignItems: "start",
+    borderRadius: 16,
+    background: "#f8fafc",
+    border: "1px solid #eef1f5",
+    padding: "11px 12px"
+  },
+  summaryItemLabel: {
+    color: "#7a8494",
+    fontSize: 12,
+    fontWeight: 700,
+    lineHeight: 1.45
+  },
+  summaryItemValue: {
+    color: "#313b4b",
+    fontSize: 15,
+    lineHeight: 1.55,
+    wordBreak: "keep-all"
   },
   detailButton: {
-    marginTop: 8,
-    border: "1px solid #cfd8e3",
-    background: "#f9fbfd",
-    color: "#1f2937",
-    borderRadius: 6,
-    padding: "6px 10px",
-    fontSize: 13,
-    fontWeight: 700,
-    cursor: "pointer"
-  },
-  detail: {
+    width: "100%",
+    height: 44,
     marginTop: 12,
-    padding: "12px 14px",
-    border: "1px solid #e5eaf0",
-    borderRadius: 8,
-    background: "#fbfcfe"
+    border: "1px solid",
+    borderRadius: 14,
+    fontSize: 15,
+    fontWeight: 800,
+    cursor: "pointer",
+    fontFamily: "inherit"
+  },
+  detailsPanel: {
+    marginTop: 14,
+    paddingTop: 2,
+    borderTop: "1px solid #eef0f3"
   },
   detailRow: {
+    padding: "14px 0",
+    borderTop: "1px solid #eef0f3"
+  },
+  detailLabel: {
+    marginBottom: 6,
+    color: "#68707f",
+    fontSize: 14,
+    fontWeight: 700
+  },
+  detailValue: {
+    color: "#303846",
+    fontSize: 15,
+    lineHeight: 1.65,
+    wordBreak: "keep-all",
+    whiteSpace: "pre-wrap"
+  },
+  textList: {
+    margin: 0,
+    paddingLeft: 20
+  },
+  textListItem: {
+    marginBottom: 6
+  },
+  link: {
+    color: "#1b65d8",
+    fontWeight: 800,
+    textDecoration: "none"
+  },
+  summaryBox: {
+    border: "1px solid #e0eaf4",
+    borderRadius: 22,
+    background: "#f6faff",
+    padding: "18px 17px"
+  },
+  summaryBody: {
+    margin: 0,
+    color: "#4b5b70",
+    fontSize: 15,
+    lineHeight: 1.68,
+    wordBreak: "keep-all"
+  },
+  notice: {
     display: "grid",
-    gridTemplateColumns: "120px minmax(0, 1fr)",
+    gridTemplateColumns: "34px 1fr",
     gap: 12,
-    padding: "8px 0",
-    borderBottom: "1px solid #edf1f5"
+    alignItems: "start",
+    border: "1px solid #eadbbf",
+    borderRadius: 20,
+    background: "#fffbf4",
+    padding: 16,
+    marginBottom: 10
   },
-  detailLabel: { fontSize: 12, fontWeight: 800, color: "#555" },
-  detailValue: { minWidth: 0, fontSize: 13, color: "#333" },
-  detailText: { margin: "0 0 8px", color: "#333" },
-  emptyText: { color: "#888" },
-  riskExp: { margin: "0 0 10px", fontSize: 13, color: "#555" },
-  block: { marginTop: 8, paddingTop: 10, borderTop: "1px dashed #e0e0e0" },
-  blockTitle: { fontSize: 12, fontWeight: 700, color: "#444", marginBottom: 8 },
-  reason: {
-    padding: "7px 0",
-    borderTop: "1px dashed #e5e7eb"
+  noticeIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 999,
+    background: "#b66b16",
+    color: "#fff",
+    display: "grid",
+    placeItems: "center",
+    fontWeight: 800
   },
-  reasonHead: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 },
-  srcBadge: {
-    fontSize: 11,
+  noticeText: {
+    margin: 0,
+    color: "#845012",
+    fontSize: 16,
+    lineHeight: 1.48,
     fontWeight: 700,
-    padding: "2px 6px",
-    borderRadius: 4
+    wordBreak: "keep-all"
   },
-  reasonType: { fontSize: 13, fontWeight: 600, color: "#333" },
-  evidence: { margin: "2px 0", fontSize: 13, color: "#1a1a1a" },
-  reasonExp: { margin: "2px 0 6px", fontSize: 12, color: "#666" },
-  legalWrap: { marginTop: 4 },
-  legalLabel: { fontSize: 11, fontWeight: 700, color: "#888" },
-  legalUl: { margin: "2px 0 0", paddingLeft: 18 },
-  legalLi: { fontSize: 12, color: "#555", marginBottom: 2 },
-  sub: { margin: "6px 0 0", fontSize: 13, color: "#555" },
   overall: {
-    marginTop: 20,
-    paddingTop: 14,
-    borderTop: "1px solid #e3e3e3",
-    fontSize: 12,
-    color: "#888"
+    margin: "20px 0 0",
+    color: "#68707f",
+    fontSize: 14,
+    lineHeight: 1.7,
+    wordBreak: "keep-all"
+  },
+  emptyText: {
+    margin: 0,
+    color: "#68707f",
+    fontSize: 17
+  },
+  footer: {
+    position: "fixed",
+    left: "50%",
+    bottom: 0,
+    width: "min(520px, 100%)",
+    transform: "translateX(-50%)",
+    padding: "18px 20px 24px",
+    background: "linear-gradient(180deg, rgba(248,250,251,0), #f8fafb 30%)"
+  },
+  footerButton: {
+    width: "100%",
+    height: 56,
+    border: 0,
+    borderRadius: 16,
+    background: "#222832",
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: 800,
+    cursor: "pointer"
+  },
+  statusWrap: {
+    minHeight: "100vh",
+    display: "grid",
+    placeItems: "center",
+    padding: 24
+  },
+  statusText: {
+    margin: 0,
+    color: "#273040",
+    fontSize: 18,
+    fontWeight: 700,
+    textAlign: "center",
+    wordBreak: "keep-all"
   }
 }
 
