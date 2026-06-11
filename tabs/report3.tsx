@@ -84,8 +84,10 @@ function reportLead(
 }
 
 function formatConfidence(confidence: number): string {
-  if (!Number.isFinite(confidence)) return "0"
-  return String(Math.round(confidence * 10000) / 10000)
+  if (!Number.isFinite(confidence)) return "정보 없음"
+  const percent = Math.round(Math.max(0, Math.min(1, confidence)) * 100)
+  if (percent === 0 && confidence > 0) return "1% 미만"
+  return `${percent}%`
 }
 
 function displaySignalScore(score: number): number {
