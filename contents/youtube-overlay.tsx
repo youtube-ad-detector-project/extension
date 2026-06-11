@@ -261,6 +261,60 @@ function statusDot(summary: ScanSummary | null): string {
   return "#1f7a34"
 }
 
+// 1차 룰 보고서 진입 링크 — 클릭 시 background 가 report.html(룰 근거 보고서) 탭을 연다.
+//   무엇이 들어가 → 처리 → 무엇이 반환: videoId+summary → 위반·의심이 있을 때 룰 보고서 버튼.
+function RuleReportLink({
+  videoId,
+  summary
+}: {
+  videoId: string
+  summary: ScanSummary | null
+}) {
+  if (!summary || (summary.positive === 0 && summary.route === 0)) return null
+
+  const open = () => {
+    // kind 생략 → background 가 기본 report.html 로 연다
+    const msg: OpenReportMessage = { type: "OPEN_REPORT", videoId }
+    void chrome.runtime.sendMessage(msg)
+  }
+
+  return (
+    <button
+      onClick={open}
+      style={styles.reportLink}
+      title="룰 기반 탐지 근거 보고서 열기">
+      1차 룰 보고서 보기
+    </button>
+  )
+}
+
+// 2차 AI 보고서 진입 링크 — 클릭 시 background 가 report2.html(모델 동작 과정) 탭을 연다.
+//   룰에서 걸린 문장이 있을 때만 모델 검사의 설명 대상이 있으므로 같은 게이트를 사용한다.
+function AiReportLink({
+  videoId,
+  summary
+}: {
+  videoId: string
+  summary: ScanSummary | null
+}) {
+  if (!summary || (summary.positive === 0 && summary.route === 0)) return null
+
+  const open = () => {
+    // kind:"ai" → background 가 report2.html 로 분기해 연다
+    const msg: OpenReportMessage = { type: "OPEN_REPORT", videoId, kind: "ai" }
+    void chrome.runtime.sendMessage(msg)
+  }
+
+  return (
+    <button
+      onClick={open}
+      style={styles.reportLink}
+      title="AI 동작 과정과 분류 결과 보고서 열기">
+      2차 AI 보고서 보기
+    </button>
+  )
+}
+
 // 최종 보고서 진입 링크 — 클릭 시 background 가 report3.html(점수·법령·모델 결과를 합친 화면) 탭을 연다.
 //   무엇이 들어가 → 처리 → 무엇이 반환: videoId+summary → 위반·의심이 있을 때 최종 보고서 버튼.
 function FinalReportLink({
@@ -282,7 +336,7 @@ function FinalReportLink({
     <button
       onClick={open}
       style={styles.reportLink}
-      title="주의 신호와 문장별 근거를 자세히 보기">
+      title="위험도·근거·정밀 검사 결과를 합친 보고서 열기">
       보고서 자세히 보기
     </button>
   )
@@ -386,7 +440,9 @@ function ViolationPanel({
           ×
         </button>
       </div>
-      {/* 사용자에게는 최종 보고서 하나만 노출한다. */}
+      {/* 보고서 진입점: 사용자가 요청한 1차/2차 보고서와 최종 보고서를 함께 노출한다. */}
+      <RuleReportLink videoId={videoId} summary={summary} />
+      <AiReportLink videoId={videoId} summary={summary} />
       <FinalReportLink videoId={videoId} summary={summary} />
       <div style={styles.panelBody}>{renderAiBody(ai, flagged)}</div>
     </div>

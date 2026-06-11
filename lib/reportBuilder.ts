@@ -32,10 +32,8 @@ export type AppliedException = {
 
 export type ModelInspectionResult = {
   resultLabel: string
-  confidence: number
   confidencePercent: number
   isViolation: boolean
-  explanation: string
 }
 
 export type ModelInspectionSummary = {
@@ -81,7 +79,7 @@ export type FinalReport = {
 
 // 고정 주의 문구 — 단정 표현 방지 문구를 코드 상수로 고정해 기본 보고서에서 흔들리지 않게 한다.
 const VIDEO_RISK_CAUTION =
-  "높게 나왔다면, 구매 전에 한 번 더 확인해 보세요."
+  "이 점수는 실제 위법 확률이 아니라 탐지된 표현과 모델 결과를 바탕으로 한 참고 지표입니다."
 const OVERALL_CAUTION =
   "이 결과는 자동 탐지 기준에 따른 검토 안내입니다. 법적 판단이나 위법 확정은 관계 기관 또는 전문가 검토가 필요합니다."
 
@@ -89,9 +87,9 @@ const OVERALL_CAUTION =
 function buildVideoSummary(vr: VideoRisk): string {
   // 의심 문장이 없으면 "표시 없음" — 단정 대신 '신호 없음'으로 표현
   if (vr.riskGrade === "표시 없음") {
-    return "현재 기준에서는 크게 주의할 만한 표현이 확인되지 않았습니다."
+    return "현재 탐지 기준상 뚜렷한 위법 의심 신호가 감지되지 않았습니다."
   }
-  return `구매 판단에 영향을 줄 수 있는 표현 ${vr.suspiciousSentenceCount}개를 찾았습니다.`
+  return `검토가 필요한 문장 ${vr.suspiciousSentenceCount}개가 확인되었습니다. 가장 높은 문장 위험도는 ${vr.maxSentenceRiskPercent}점입니다.`
 }
 
 // rule/trigger hit 을 근거 항목으로 평탄화 — rule 은 직접 근거(legalBasis), trigger 는 후보(candidate)로 분리
@@ -145,9 +143,9 @@ function buildTriggerExplanation(r: AnalysisResult): string | null {
 function buildModelExplanation(r: AnalysisResult): string | null {
   const m = r.modelResult
   if (!m) return null
-  const verdict =
-    m.prediction === 1 ? "주의가 필요한 표현" : "추가 의심이 낮은 표현"
-  return `정밀 검사 결과, 현재 기준에서 ${verdict}으로 예측되었습니다.`
+  const confidencePercent = Math.round(m.confidence * 100)
+  const verdict = m.prediction === 1 ? "위법 의심" : "추가 의심 낮음"
+  return `정밀 검사 결과 ${verdict}으로 분류되었습니다. 모델 라벨은 ${m.predictionLabel}, 신뢰도는 ${confidencePercent}%입니다.`
 }
 
 function unique(items: string[]): string[] {
@@ -170,13 +168,8 @@ function buildModelInspectionResult(
 
   return {
     resultLabel: m.predictionLabel,
-    confidence: m.confidence,
     confidencePercent: Math.round(m.confidence * 100),
-    isViolation: m.prediction === 1,
-    explanation:
-      m.prediction === 1
-        ? "정밀 검사 결과, 현재 기준에서 주의가 필요한 표현으로 예측되었습니다."
-        : "정밀 검사 결과, 현재 기준에서는 추가 의심이 낮은 표현으로 예측되었습니다."
+    isViolation: m.prediction === 1
   }
 }
 
@@ -211,7 +204,7 @@ function buildModelInspectionSummary(
     averageConfidencePercent,
     resultText:
       violationSentenceCount > 0
-        ? `주의 표현 ${violationSentenceCount}건`
+        ? `위법 의심 ${violationSentenceCount}건`
         : "추가 의심 낮음",
     averageConfidenceText: `${averageConfidencePercent}%`
   }
