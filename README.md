@@ -236,6 +236,15 @@ pnpm dev
 ```
 이때는 `build/chrome-mv3-dev/` 폴더로 빌드됩니다.
 
+### API 서버 + AI 추론 서버
+최종 보고서의 AI 검증을 쓰려면 Next API 서버와 로컬 추론 서버를 함께 켭니다.
+
+```bash
+pnpm run dev:servers
+```
+
+이 명령은 `server/`의 Next 서버를 `http://localhost:3000`에서, `infer/`의 FastAPI 추론 서버를 `http://127.0.0.1:8000`에서 함께 실행합니다. 기본적으로 Next 서버에는 `HF_CLASSIFY_URL=http://127.0.0.1:8000/classify`가 전달됩니다.
+
 ---
 
 ## 🔍 디버깅 가이드
