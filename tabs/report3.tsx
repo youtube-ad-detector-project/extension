@@ -1,10 +1,10 @@
-// 최종 종합 보고서 — 확장 내부 탭 (Plasmo 가 tabs/report3.tsx → tabs/report3.html 로 빌드).
-//   호출 흐름: 오버레이 ViolationPanel 의 "🧾 최종 종합 보고서 열기"
+// 광고 표현 검토 결과 — 확장 내부 탭 (Plasmo 가 tabs/report3.tsx → tabs/report3.html 로 빌드).
+//   호출 흐름: 오버레이 ViolationPanel 의 "보고서 자세히 보기"
 //     → background 가 chrome.tabs.create("tabs/report3.html?v=<영상ID>")
 //     → 이 페이지가 ?v= 로 영상ID 를 받아 storage 자막을 읽고 룰 스캔(1차) 재실행 →
-//       위반·의심 문장을 /api/classify 로 AI 검증 → 결과를 엔진에 합쳐(attachModelResult) 위험도 재계산 →
+//       위반·의심 문장을 /api/classify 로 정밀 검사 → 결과를 엔진에 합쳐(attachModelResult) 위험도 재계산 →
 //       영상 위험도(calculateVideoRisk) + 보고서 조립(buildFinalReport) → 렌더.
-//   왜 report/report2 와 분리: 1차=룰 근거, 2차=AI 동작, 3차=점수·법령·AI를 합친 "사용자용 종합 결론".
+//   왜 report/report2 와 분리: 1차=룰 근거, 2차=모델 동작, 3차=점수·법령·모델 결과를 합친 사용자용 화면.
 
 import { useEffect, useState } from "react"
 
@@ -83,7 +83,7 @@ function Report3() {
       // 위반·의심이 0건이면 classify 생략 → merged=scanned (영상 위험도는 '표시 없음'으로 단락)
       let merged = scanned
       if (flaggedLines.length > 0) {
-        setState({ phase: "loading", message: `AI 검증 중… (${flaggedLines.length}문장)` })
+        setState({ phase: "loading", message: `정밀 검사 중… (${flaggedLines.length}문장)` })
         try {
           const res = await fetch(`${SERVER}/api/classify`, {
             method: "POST",
@@ -108,7 +108,7 @@ function Report3() {
           const reason = e instanceof Error ? e.message : String(e)
           setState({
             phase: "problem",
-            message: `AI 검증 실패: ${reason} (infer 서버 :8000 / Next :3000 켜졌는지 확인)`
+            message: `정밀 검사 실패: ${reason} (infer 서버 :8000 / Next :3000 켜졌는지 확인)`
           })
           return
         }
@@ -128,38 +128,66 @@ function Report3() {
 
   const { videoId, report, flagged } = state
   const vrs = report.videoRiskSummary
+  const modelSummary = report.modelInspectionSummary
 
   return (
     <Shell>
-      <h1 style={styles.h1}>최종 종합 보고서</h1>
-      <p style={styles.meta}>
-        영상{" "}
-        <a
-          style={styles.link}
-          href={`https://www.youtube.com/watch?v=${videoId}`}
-          target="_blank"
-          rel="noreferrer">
-          {videoId}
-        </a>{" "}
-        · 위반·의심 문장 {report.sentenceReports.length}건
-      </p>
+      <section style={styles.hero}>
+        <h1 style={styles.h1}>광고 표현 검토 결과</h1>
+        <p style={styles.meta}>
+          영상{" "}
+          <a
+            style={styles.link}
+            href={`https://www.youtube.com/watch?v=${videoId}`}
+            target="_blank"
+            rel="noreferrer">
+            {videoId}
+          </a>{" "}
+          · 확인 문장 {report.sentenceReports.length}건
+        </p>
 
-      {/* 영상 단위 요약 — 점수/등급/설명 + 주의 문구 */}
-      <section style={{ ...styles.summary, borderLeft: `5px solid ${gradeColor(vrs.riskGrade)}` }}>
-        <div style={styles.summaryHead}>
-          <span style={{ ...styles.grade, color: gradeColor(vrs.riskGrade) }}>
-            {vrs.riskGrade}
-          </span>
-          <span style={styles.score}>자동 탐지 위험도 {vrs.riskScore}점</span>
-          <span style={styles.levelText}>{vrs.riskLevelText}</span>
-        </div>
-        <p style={styles.summaryText}>{vrs.summary}</p>
-        <p style={styles.caution}>⚠ {vrs.caution}</p>
+        {/* 첫 화면 요약 — 사용자가 먼저 봐야 하는 핵심 지표만 숫자 카드로 모은다. */}
+        <section style={styles.metricGrid}>
+          <Metric
+            label="종합 위험도"
+            value={`${vrs.riskScore}점`}
+            sub={vrs.riskGrade}
+            color={gradeColor(vrs.riskGrade)}
+          />
+          <Metric
+            label="확인 문장 수"
+            value={`${report.sentenceReports.length}문장`}
+            sub="룰·트리거 기준"
+          />
+          <Metric
+            label="정밀 검사 결과"
+            value={modelSummary.resultText}
+            sub={`${modelSummary.inspectedSentenceCount}문장 검사`}
+          />
+          <Metric
+            label="평균 신뢰도"
+            value={modelSummary.averageConfidenceText}
+            sub="모델 결과 기준"
+          />
+        </section>
+
+        {/* 영상 단위 요약 — 계산된 위험도와 주의 문구만 노출 */}
+        <section style={{ ...styles.summary, borderLeft: `5px solid ${gradeColor(vrs.riskGrade)}` }}>
+          <div style={styles.summaryHead}>
+            <span style={{ ...styles.grade, color: gradeColor(vrs.riskGrade) }}>
+              {vrs.riskGrade}
+            </span>
+            <span style={styles.score}>종합 위험도 {vrs.riskScore}점</span>
+            <span style={styles.levelText}>{vrs.riskLevelText}</span>
+          </div>
+          <p style={styles.summaryText}>{vrs.summary}</p>
+          <p style={styles.caution}>{vrs.caution}</p>
+        </section>
       </section>
 
-      {/* 문장별 보고서 — sentenceReports 와 flagged 는 같은 순서라 i 로 타임스탬프 매핑 */}
+      {/* 문장별 근거 — 기본은 닫힌 요약, 사용자가 원할 때만 자세한 근거를 펼친다. */}
       {report.sentenceReports.length === 0 ? (
-        <p style={styles.meta}>위반·의심으로 분류된 문장이 없습니다 ✅</p>
+        <p style={styles.meta}>위반·의심으로 분류된 문장이 없습니다.</p>
       ) : (
         report.sentenceReports.map((sr, i) => (
           <SentenceCard
@@ -176,7 +204,36 @@ function Report3() {
   )
 }
 
-// 문장 1개 보고서 카드 — 판정/위험도 → 근거(법령) → 트리거/모델/건기식/예외 순으로 쌓는다
+function Metric({
+  label,
+  value,
+  sub,
+  color
+}: {
+  label: string
+  value: string
+  sub: string
+  color?: string
+}) {
+  return (
+    <div style={styles.metric}>
+      <div style={styles.metricLabel}>{label}</div>
+      <div style={{ ...styles.metricValue, ...(color ? { color } : {}) }}>{value}</div>
+      <div style={styles.metricSub}>{sub}</div>
+    </div>
+  )
+}
+
+function formatList(items: string[], emptyText: string): string {
+  return items.length > 0 ? items.join(", ") : emptyText
+}
+
+function modelVerdictText(report: SentenceReport): string {
+  if (!report.modelInspection) return "검사 결과 없음"
+  return report.modelInspection.isViolation ? "위법 의심" : "추가 의심 낮음"
+}
+
+// 문장 1개 요약 카드 — 기본은 핵심 판정만 보이고, 상세 근거는 사용자가 펼칠 때만 렌더한다.
 function SentenceCard({
   videoId,
   start,
@@ -186,8 +243,10 @@ function SentenceCard({
   start: number
   report: SentenceReport
 }) {
+  const [open, setOpen] = useState(false)
   const statusView = STATUS_VIEW[report.finalStatus]
   const sec = Math.floor(start)
+  const modelInspection = report.modelInspection
 
   return (
     <section style={{ ...styles.card, borderLeft: `4px solid ${statusView.color}` }}>
@@ -209,62 +268,106 @@ function SentenceCard({
           {report.userFacingDecision}
         </span>
         <span style={styles.riskPct}>위험도 {report.sentenceRiskPercent}%</span>
-        <span style={styles.statusTag}>{report.finalStatus}</span>
+        {modelInspection && (
+          <span style={styles.statusTag}>
+            정밀 검사 {modelInspection.confidencePercent}%
+          </span>
+        )}
       </div>
       <p style={styles.plainConclusion}>{report.plainConclusion}</p>
-      <p style={styles.riskExp}>{report.riskExplanation}</p>
 
-      {/* 탐지 근거 — rule(직접)·trigger(후보) 항목별 */}
-      {report.detectedReasons.length > 0 && (
-        <div style={styles.block}>
-          <div style={styles.blockTitle}>탐지 근거</div>
-          {report.detectedReasons.map((r, i) => (
-            <ReasonRow key={i} reason={r} />
-          ))}
-        </div>
-      )}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        style={styles.detailButton}
+        aria-expanded={open}>
+        {open ? "근거 접기" : "근거 자세히 보기"}
+      </button>
 
-      {/* 트리거/모델/건기식 설명 — 있을 때만 */}
-      {report.triggerExplanation && (
-        <p style={styles.sub}>🔸 {report.triggerExplanation}</p>
-      )}
-      {report.modelExplanation && (
-        <p style={styles.sub}>🤖 {report.modelExplanation}</p>
-      )}
-      {report.healthFoodExplanation && (
-        <p style={styles.sub}>
-          💊 {report.healthFoodExplanation}
-          {report.healthFoodVerificationUrl && (
-            <>
-              {" "}
-              <a
-                style={styles.link}
-                href={report.healthFoodVerificationUrl}
-                target="_blank"
-                rel="noreferrer">
-                확인하기 ↗
-              </a>
-            </>
+      {open && (
+        <div style={styles.detail}>
+          <DetailRow label="근거 문장">{report.sentence}</DetailRow>
+          <DetailRow label="위법 유형">
+            {formatList(report.violationTypes, "직접 위반 룰 없음")}
+          </DetailRow>
+          <DetailRow label="판단 이유">
+            <p style={styles.detailText}>{report.riskExplanation}</p>
+            {report.detectedReasons.map((reason, i) => (
+              <ReasonRow key={i} reason={reason} />
+            ))}
+          </DetailRow>
+          <DetailRow label="관련 법률">
+            <LegalList label="직접 근거" items={report.directLegalBasis} />
+            <LegalList label="관련 후보" items={report.relatedLegalBasisCandidates} />
+            {report.directLegalBasis.length === 0 &&
+              report.relatedLegalBasisCandidates.length === 0 && (
+                <span style={styles.emptyText}>표시할 법률 근거 없음</span>
+              )}
+          </DetailRow>
+          <DetailRow label="트리거 유형">
+            {formatList(report.triggerTypes, "트리거 없음")}
+          </DetailRow>
+          <DetailRow label="모델 검사 결과">{modelVerdictText(report)}</DetailRow>
+          <DetailRow label="모델 신뢰도">
+            {modelInspection ? `${modelInspection.confidencePercent}%` : "검사 결과 없음"}
+          </DetailRow>
+
+          {report.triggerExplanation && (
+            <p style={styles.sub}>{report.triggerExplanation}</p>
           )}
-        </p>
-      )}
-
-      {/* 예외 적용 — 위반 점수에서 제외된 사유 */}
-      {report.appliedExceptions.length > 0 && (
-        <div style={styles.block}>
-          <div style={styles.blockTitle}>적용된 예외</div>
-          {report.appliedExceptions.map((e, i) => (
-            <p key={i} style={styles.sub}>
-              ✔ {e.exceptionType} — {e.explanation}
+          {report.modelExplanation && (
+            <p style={styles.sub}>{report.modelExplanation}</p>
+          )}
+          {report.healthFoodExplanation && (
+            <p style={styles.sub}>
+              {report.healthFoodExplanation}
+              {report.healthFoodVerificationUrl && (
+                <>
+                  {" "}
+                  <a
+                    style={styles.link}
+                    href={report.healthFoodVerificationUrl}
+                    target="_blank"
+                    rel="noreferrer">
+                    확인하기
+                  </a>
+                </>
+              )}
             </p>
-          ))}
+          )}
+
+          {report.appliedExceptions.length > 0 && (
+            <div style={styles.block}>
+              <div style={styles.blockTitle}>적용된 예외</div>
+              {report.appliedExceptions.map((e, i) => (
+                <p key={i} style={styles.sub}>
+                  {e.exceptionType}: {e.explanation}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </section>
   )
 }
 
-// 근거 1개 — 출처(rule/trigger) 배지 + 유형 + 근거 표현 + 설명 + 법령 목록 3종
+function DetailRow({
+  label,
+  children
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div style={styles.detailRow}>
+      <div style={styles.detailLabel}>{label}</div>
+      <div style={styles.detailValue}>{children}</div>
+    </div>
+  )
+}
+
+// 근거 1개 — 출처(rule/trigger) 배지 + 유형 + 근거 표현 + 설명
 function ReasonRow({ reason }: { reason: SentenceReport["detectedReasons"][number] }) {
   const isRule = reason.source === "rule"
   return (
@@ -282,14 +385,11 @@ function ReasonRow({ reason }: { reason: SentenceReport["detectedReasons"][numbe
       </div>
       <p style={styles.evidence}>“{reason.evidenceText}”</p>
       {reason.explanation && <p style={styles.reasonExp}>{reason.explanation}</p>}
-      <LegalList label="근거 법령" items={reason.legalBasis} />
-      <LegalList label="관련 법령 후보" items={reason.relatedLegalBasisCandidates} />
-      <LegalList label="합법 예외 참고" items={reason.safeHarborReferences} />
     </div>
   )
 }
 
-// 법령 문구 목록 — 비어있으면 렌더 자체를 생략 (빈 칸 노이즈 방지)
+// 법령 문구 목록 — 비어있으면 렌더 자체를 생략해 계산되지 않은 정보처럼 보이지 않게 한다.
 function LegalList({ label, items }: { label: string; items: string[] }) {
   if (items.length === 0) return null
   return (
@@ -314,25 +414,53 @@ function Shell({ children }: { children: React.ReactNode }) {
 // 인라인 스타일 — 글이 많아 가독성 우선(밝은 배경/검은 글씨), report2 와 톤 통일
 const styles: Record<string, React.CSSProperties> = {
   page: {
-    maxWidth: 880,
+    maxWidth: 1040,
     margin: "0 auto",
-    padding: "32px 24px",
+    padding: "36px 24px 48px",
     fontFamily:
       '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     color: "#1a1a1a",
     fontSize: 14,
-    lineHeight: 1.6
+    lineHeight: 1.6,
+    background: "#f6f8fb",
+    minHeight: "100vh",
+    boxSizing: "border-box"
   },
-  h1: { fontSize: 22, margin: "0 0 4px" },
+  hero: {
+    background: "#fff",
+    border: "1px solid #dde3ea",
+    borderTop: "6px solid #496f9d",
+    borderRadius: 12,
+    padding: "24px 26px 6px",
+    marginBottom: 20,
+    boxShadow: "0 10px 28px rgba(20, 32, 50, 0.08)"
+  },
+  h1: { fontSize: 28, lineHeight: 1.2, margin: "0 0 8px", letterSpacing: 0 },
   meta: { color: "#555", margin: "0 0 12px" },
   link: { color: "#1a73e8", textDecoration: "none" },
+  metricGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+    gap: 10,
+    margin: "18px 0"
+  },
+  metric: {
+    background: "#f9fbfd",
+    border: "1px solid #e4e9f0",
+    borderRadius: 8,
+    padding: "12px 14px",
+    minHeight: 88
+  },
+  metricLabel: { fontSize: 12, color: "#666", marginBottom: 6 },
+  metricValue: { fontSize: 22, fontWeight: 800, color: "#1f2937", lineHeight: 1.2 },
+  metricSub: { fontSize: 12, color: "#777", marginTop: 6 },
   summary: {
     background: "#fff",
-    border: "1px solid #e3e3e3",
+    border: "1px solid #e4e9f0",
     borderRadius: 8,
     padding: "16px 18px",
-    marginBottom: 20,
-    boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
+    marginBottom: 18,
+    boxShadow: "none"
   },
   summaryHead: { display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" },
   grade: { fontSize: 20, fontWeight: 800 },
@@ -342,13 +470,20 @@ const styles: Record<string, React.CSSProperties> = {
   caution: { margin: 0, fontSize: 12, color: "#888" },
   card: {
     background: "#fff",
-    border: "1px solid #e3e3e3",
+    border: "1px solid #dde3ea",
     borderRadius: 8,
-    padding: "14px 16px",
+    padding: "16px 18px",
     marginBottom: 14,
-    boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
+    boxShadow: "0 4px 14px rgba(20, 32, 50, 0.06)"
   },
-  cardHead: { display: "flex", alignItems: "baseline", gap: 10, marginBottom: 8 },
+  cardHead: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: 10,
+    marginBottom: 10,
+    paddingBottom: 10,
+    borderBottom: "1px solid #edf1f5"
+  },
   ts: {
     color: "#1a73e8",
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
@@ -356,8 +491,14 @@ const styles: Record<string, React.CSSProperties> = {
     textDecoration: "none",
     flexShrink: 0
   },
-  lineText: { fontWeight: 600 },
-  decisionRow: { display: "flex", alignItems: "center", gap: 10, marginBottom: 4 },
+  lineText: { fontWeight: 700, wordBreak: "break-word", lineHeight: 1.5 },
+  decisionRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 6,
+    flexWrap: "wrap"
+  },
   decision: { fontWeight: 700, fontSize: 15 },
   riskPct: {
     fontSize: 13,
@@ -367,23 +508,49 @@ const styles: Record<string, React.CSSProperties> = {
   },
   statusTag: { fontSize: 11, color: "#999" },
   plainConclusion: {
-    margin: "4px 0 8px",
-    padding: "8px 10px",
+    margin: "4px 0 10px",
+    padding: "10px 12px",
     background: "#f8fbff",
-    border: "1px solid #dbe8ff",
-    borderRadius: 6,
+    border: "1px solid #d8e4f2",
+    borderRadius: 8,
     fontSize: 14,
     color: "#1f2937"
   },
+  detailButton: {
+    marginTop: 8,
+    border: "1px solid #cfd8e3",
+    background: "#f9fbfd",
+    color: "#1f2937",
+    borderRadius: 6,
+    padding: "6px 10px",
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer"
+  },
+  detail: {
+    marginTop: 12,
+    padding: "12px 14px",
+    border: "1px solid #e5eaf0",
+    borderRadius: 8,
+    background: "#fbfcfe"
+  },
+  detailRow: {
+    display: "grid",
+    gridTemplateColumns: "120px minmax(0, 1fr)",
+    gap: 12,
+    padding: "8px 0",
+    borderBottom: "1px solid #edf1f5"
+  },
+  detailLabel: { fontSize: 12, fontWeight: 800, color: "#555" },
+  detailValue: { minWidth: 0, fontSize: 13, color: "#333" },
+  detailText: { margin: "0 0 8px", color: "#333" },
+  emptyText: { color: "#888" },
   riskExp: { margin: "0 0 10px", fontSize: 13, color: "#555" },
   block: { marginTop: 8, paddingTop: 10, borderTop: "1px dashed #e0e0e0" },
   blockTitle: { fontSize: 12, fontWeight: 700, color: "#444", marginBottom: 8 },
   reason: {
-    background: "#fafafa",
-    border: "1px solid #eee",
-    borderRadius: 6,
-    padding: "8px 10px",
-    marginBottom: 8
+    padding: "7px 0",
+    borderTop: "1px dashed #e5e7eb"
   },
   reasonHead: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 },
   srcBadge: {

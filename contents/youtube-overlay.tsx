@@ -16,7 +16,6 @@ import {
   type ScannedLine
 } from "~lib/adScan"
 import { getVideoIdFromUrl } from "~lib/captions"
-import { buildDataset } from "~lib/datasetExport"
 import type {
   CaptionsError,
   CaptionsPayload,
@@ -235,12 +234,11 @@ function Overlay() {
         scanned={scanned}
         summary={summary}
       />
-      {/* 위법 패널: 표시는 룰이 아니라 AI 검증(ai) 기준. ReportLink/JSON 복사는 1차(룰) 기준이라 summary/scanned 도 함께 넘김 */}
+      {/* 위법 패널: 표시는 룰이 아니라 AI 검증(ai) 기준. 사용자 진입점은 최종 보고서 하나만 노출 */}
       <ViolationPanel
         flagged={flagged}
         ai={ai}
         summary={summary}
-        scanned={scanned}
         videoId={videoId}
       />
       {/* 진행 패널: 영상추출 → 룰엔진 → AI검증 3단계를 실시간으로 보여줌 */}
@@ -263,40 +261,36 @@ function statusDot(summary: ScanSummary | null): string {
   return "#1f7a34"
 }
 
-// 보고서 진입 링크 — ViolationPanel(⚠) 에서만 사용. CC 패널과 함께 두 곳에 두면 같은 진입점이
-//   중복돼 헷갈리므로 위반/의심 패널 한쪽으로 일원화한다.
-//   무엇이 들어가 → 처리 → 무엇이 반환: videoId+summary → (위반·의심 있으면) 링크 버튼 / 없으면 null
-function ReportLink({
+// 1차 룰 보고서 진입 링크 — 클릭 시 background 가 report.html(룰 근거 보고서) 탭을 연다.
+//   무엇이 들어가 → 처리 → 무엇이 반환: videoId+summary → 위반·의심이 있을 때 룰 보고서 버튼.
+function RuleReportLink({
   videoId,
   summary
 }: {
   videoId: string
   summary: ScanSummary | null
 }) {
-  // 위반·의심이 하나도 없으면 "펼칠 근거"가 없으므로 링크 자체를 렌더하지 않음
   if (!summary || (summary.positive === 0 && summary.route === 0)) return null
 
-  // 클릭 → background 에 보고서 탭 열기 위임.
-  //   왜 직접 안 열까: 콘텐츠 스크립트엔 chrome.tabs 가 없고, web_accessible_resources
-  //   없이 확장 페이지를 여는 건 background 의 chrome.tabs.create 만 가능하기 때문.
-  const openReport = () => {
+  const open = () => {
+    // kind 생략 → background 가 기본 report.html 로 연다
     const msg: OpenReportMessage = { type: "OPEN_REPORT", videoId }
     void chrome.runtime.sendMessage(msg)
   }
 
   return (
     <button
-      onClick={openReport}
+      onClick={open}
       style={styles.reportLink}
-      title="새 탭에서 상세 근거 보고서 열기">
-      📄 상세 위반 보고서 열기 ↗
+      title="룰 기반 탐지 근거 보고서 열기">
+      1차 룰 보고서 보기
     </button>
   )
 }
 
 // 2차 AI 보고서 진입 링크 — 클릭 시 background 가 report2.html(모델 동작 과정) 탭을 연다.
-//   ReportLink(1차 룰)와 같은 게이트: 룰에서 걸린 게 있어야 설명할 대상이 있으므로 위반·의심 0건이면 숨김.
-function Report2Link({
+//   룰에서 걸린 문장이 있을 때만 모델 검사의 설명 대상이 있으므로 같은 게이트를 사용한다.
+function AiReportLink({
   videoId,
   summary
 }: {
@@ -315,15 +309,15 @@ function Report2Link({
     <button
       onClick={open}
       style={styles.reportLink}
-      title="AI 동작 과정(토큰화·로짓·softmax 확률) 상세 보기">
-      📋 2차 AI 보고서 열기 ↗
+      title="AI 동작 과정과 분류 결과 보고서 열기">
+      2차 AI 보고서 보기
     </button>
   )
 }
 
-// 최종 종합 보고서 진입 링크 — 클릭 시 background 가 report3.html(점수·법령·AI 합친 종합 결론) 탭을 연다.
-//   다른 보고서 링크와 같은 게이트: 위반·의심 0건이면 종합할 대상이 없으므로 숨김.
-function Report3Link({
+// 최종 보고서 진입 링크 — 클릭 시 background 가 report3.html(점수·법령·모델 결과를 합친 화면) 탭을 연다.
+//   무엇이 들어가 → 처리 → 무엇이 반환: videoId+summary → 위반·의심이 있을 때 최종 보고서 버튼.
+function FinalReportLink({
   videoId,
   summary
 }: {
@@ -342,51 +336,8 @@ function Report3Link({
     <button
       onClick={open}
       style={styles.reportLink}
-      title="위험도 점수·법령 근거·AI 판정을 합친 최종 종합 보고서 열기">
-      🧾 최종 종합 보고서 열기 ↗
-    </button>
-  )
-}
-
-// JSON 복사 버튼 — 위반·의심 줄(scanned 중 Rule-Negative 제외) 을 {text, status} JSON 으로 클립보드 복사.
-//   왜 오버레이로 이동: 보고서 탭에서 굳이 한 번 더 클릭할 필요 없이, 영상 보면서 바로 노션에 붙여넣을 수 있게.
-//   무엇이 들어가 → 처리 → 무엇이 반환:
-//     scanned(전체 스캔 결과) → buildDataset 으로 위반·의심만 {text, status} 화 → 들여쓰기 2칸 문자열 → clipboard
-function CopyDatasetButton({ scanned }: { scanned: ScannedLine[] | null }) {
-  // 클릭 직후 "복사됨 ✓" 라벨로 잠깐 바꿔 사용자에게 "동작했음" 피드백 (2초 후 원복)
-  const [copied, setCopied] = useState(false)
-
-  // scanned 가 없거나(분석 전) 위반·의심 줄이 0건이면 복사할 데이터가 없으므로 버튼 비활성
-  const flagged = scanned
-    ? scanned.filter((l) => l.status !== "Rule-Negative")
-    : []
-  const disabled = flagged.length === 0
-
-  const onCopy = async () => {
-    if (disabled) return
-    // buildDataset: ScannedLine[] → [{text, status}] 외부 라벨로 변환 (Rule-Negative 자동 제외)
-    //   왜 들여쓰기 2칸: 노션 코드블록에 그대로 붙여도 사람이 읽기 좋게.
-    const payload = buildDataset(flagged)
-    await navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
-    setCopied(true)
-    // 한 영상에서 여러 번 복사할 수 있어야 하므로 2초 뒤 라벨 원복
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  return (
-    <button
-      onClick={onCopy}
-      disabled={disabled}
-      style={{
-        ...styles.reportLink,
-        ...(disabled ? styles.copyBtnDisabled : {})
-      }}
-      title={
-        disabled
-          ? "위반·의심 0건 — 복사할 데이터 없음"
-          : `위반·의심 ${flagged.length}건을 JSON 으로 클립보드에 복사`
-      }>
-      {copied ? "복사됨 ✓" : `📋 JSON 복사 (${flagged.length}건)`}
+      title="위험도·근거·정밀 검사 결과를 합친 보고서 열기">
+      보고서 자세히 보기
     </button>
   )
 }
@@ -423,8 +374,7 @@ function SubtitlePanel({
   }
 
   // 열린 상태: 헤더 + 전체 segments 리스트.
-  //   보고서/JSON 복사 같은 위반 관련 액션은 ViolationPanel(⚠) 한 곳으로 일원화했으므로
-  //   여기엔 따로 진입 링크를 두지 않는다 (중복 제거)
+  //   사용자용 보고서 진입은 ViolationPanel(⚠) 한 곳으로 일원화했으므로 여기엔 액션을 두지 않는다.
   return (
     <div style={{ ...styles.panel, right: SLOT_SUBTITLE_RIGHT }}>
       <div style={styles.panelHeader}>
@@ -449,13 +399,11 @@ function ViolationPanel({
   flagged,
   ai,
   summary,
-  scanned,
   videoId
 }: {
   flagged: ScannedLine[]
   ai: AiState
   summary: ScanSummary | null
-  scanned: ScannedLine[] | null
   videoId: string // 보고서 탭 URL(?v=) 키 — 어떤 영상의 근거를 펼칠지 식별
 }) {
   // 자막 패널과 별개의 open 상태 — 둘을 동시에 띄울 수 있어야 하므로 독립적으로 관리
@@ -492,11 +440,10 @@ function ViolationPanel({
           ×
         </button>
       </div>
-      {/* 진입 버튼들: 1차 룰 · 2차 AI 동작 · 최종 종합 · 학습용 JSON(룰 기준) */}
-      <ReportLink videoId={videoId} summary={summary} />
-      <Report2Link videoId={videoId} summary={summary} />
-      <Report3Link videoId={videoId} summary={summary} />
-      <CopyDatasetButton scanned={scanned} />
+      {/* 보고서 진입점: 사용자가 요청한 1차/2차 보고서와 최종 보고서를 함께 노출한다. */}
+      <RuleReportLink videoId={videoId} summary={summary} />
+      <AiReportLink videoId={videoId} summary={summary} />
+      <FinalReportLink videoId={videoId} summary={summary} />
       <div style={styles.panelBody}>{renderAiBody(ai, flagged)}</div>
     </div>
   )
@@ -889,12 +836,6 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     cursor: "pointer",
     fontFamily: "inherit"
-  },
-  copyBtnDisabled: {
-    // 위반·의심 0건일 때 — 톤 다운 + cursor 변경으로 "지금은 못 누름" 표시
-    background: "rgba(255,255,255,0.06)",
-    color: "#888",
-    cursor: "not-allowed"
   },
   panelBody: {
     overflowY: "auto",

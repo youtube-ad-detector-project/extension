@@ -88,6 +88,7 @@ interface ModelResult {
 interface HfModelOutput {
   label: string;
   score: number;
+  isViolation?: boolean;
 }
 
 type RawModelResult = ModelResult | HfModelOutput | HfModelOutput[] | null | undefined;
@@ -241,8 +242,18 @@ function normalizeModelResult(raw: RawModelResult): ModelResult | null {
   const top = Array.isArray(raw) ? raw[0] : raw;
   if (!top || typeof top.label !== 'string') return null;
 
+  // 서버 Verdict 가 isViolation 을 계산해 준 경우 그 값을 우선 사용해 라벨명 변화에도 위반 여부가 유지되게 한다.
+  const prediction =
+    typeof top.isViolation === 'boolean'
+      ? top.isViolation
+        ? 1
+        : 0
+      : top.label === '의심'
+        ? 1
+        : 0;
+
   return {
-    prediction: top.label === '의심' ? 1 : 0,
+    prediction,
     predictionLabel: top.label,
     confidence: clamp01(top.score),
   };

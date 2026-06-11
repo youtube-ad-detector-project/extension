@@ -110,22 +110,24 @@ function Report2() {
 
   return (
     <Shell>
-      <h1 style={styles.h1}>2차 AI 검증 보고서</h1>
-      <p style={styles.meta}>
-        영상{" "}
-        <a
-          style={styles.link}
-          href={`https://www.youtube.com/watch?v=${videoId}`}
-          target="_blank"
-          rel="noreferrer">
-          {videoId}
-        </a>{" "}
-        · 룰 {rows.length} → 위법 확정 {confirmed} · 정상 기각 {rows.length - confirmed}
-      </p>
-      <p style={styles.note}>
-        룰 엔진이 1차로 걸러낸 문장을, 파인튜닝 분류 모델이{" "}
-        <b>입력 → 토큰화 → 로짓 → softmax → argmax</b> 순으로 어떻게 판정했는지 보여줍니다.
-      </p>
+      <section style={styles.hero}>
+        <h1 style={styles.h1}>2차 AI 검증 보고서</h1>
+        <p style={styles.meta}>
+          영상{" "}
+          <a
+            style={styles.link}
+            href={`https://www.youtube.com/watch?v=${videoId}`}
+            target="_blank"
+            rel="noreferrer">
+            {videoId}
+          </a>{" "}
+          · 룰 {rows.length} → 위법 확정 {confirmed} · 정상 기각 {rows.length - confirmed}
+        </p>
+        <p style={styles.note}>
+          룰 엔진이 1차로 걸러낸 문장을, 파인튜닝 분류 모델이{" "}
+          <b>입력 → 토큰화 → 로짓 → softmax → argmax</b> 순으로 어떻게 판정했는지 보여줍니다.
+        </p>
+      </section>
 
       {rows.length === 0 ? (
         <p style={styles.meta}>룰에서 걸린 위반·의심 문장이 없습니다 ✅</p>
@@ -295,28 +297,55 @@ function Shell({ children }: { children: React.ReactNode }) {
 // 인라인 스타일 — 글이 많아 가독성 우선(밝은 배경/검은 글씨), 1차 보고서와 톤 통일
 const styles: Record<string, React.CSSProperties> = {
   page: {
-    maxWidth: 880,
+    maxWidth: 1040,
     margin: "0 auto",
-    padding: "32px 24px",
+    padding: "36px 24px 48px",
     fontFamily:
       '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     color: "#1a1a1a",
     fontSize: 14,
-    lineHeight: 1.6
+    lineHeight: 1.6,
+    background: "#f6f8fb",
+    minHeight: "100vh",
+    boxSizing: "border-box"
   },
-  h1: { fontSize: 22, margin: "0 0 4px" },
+  hero: {
+    background: "#fff",
+    border: "1px solid #dde3ea",
+    borderTop: "6px solid #496f9d",
+    borderRadius: 12,
+    padding: "24px 26px",
+    marginBottom: 20,
+    boxShadow: "0 10px 28px rgba(20, 32, 50, 0.08)"
+  },
+  h1: { fontSize: 28, lineHeight: 1.2, margin: "0 0 8px", letterSpacing: 0 },
   meta: { color: "#555", margin: "0 0 8px" },
-  note: { color: "#777", fontSize: 13, margin: "0 0 20px" },
+  note: {
+    color: "#667085",
+    fontSize: 13,
+    margin: 0,
+    padding: "10px 12px",
+    background: "#f8fbff",
+    border: "1px solid #d8e4f2",
+    borderRadius: 8
+  },
   link: { color: "#1a73e8", textDecoration: "none" },
   card: {
     background: "#fff",
-    border: "1px solid #e3e3e3",
+    border: "1px solid #dde3ea",
     borderRadius: 8,
-    padding: "14px 16px",
+    padding: "16px 18px",
     marginBottom: 14,
-    boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
+    boxShadow: "0 4px 14px rgba(20, 32, 50, 0.06)"
   },
-  cardHead: { display: "flex", alignItems: "baseline", gap: 10, marginBottom: 8 },
+  cardHead: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: 10,
+    marginBottom: 10,
+    paddingBottom: 10,
+    borderBottom: "1px solid #edf1f5"
+  },
   ts: {
     color: "#1a73e8",
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
@@ -324,31 +353,38 @@ const styles: Record<string, React.CSSProperties> = {
     textDecoration: "none",
     flexShrink: 0
   },
-  lineText: { fontWeight: 600 },
+  lineText: { fontWeight: 700, wordBreak: "break-word", lineHeight: 1.5 },
   stage: {
     display: "flex",
     alignItems: "center",
     gap: 8,
     fontSize: 13,
-    paddingBottom: 8
+    padding: "2px 0 10px",
+    flexWrap: "wrap"
   },
   stageTag: {
-    background: "#eee",
-    color: "#555",
+    background: "#eef3f8",
+    color: "#344054",
     fontSize: 11,
     fontWeight: 700,
-    padding: "2px 6px",
+    padding: "3px 7px",
     borderRadius: 4
   },
-  stageNote: { color: "#888", fontSize: 12 },
+  stageNote: { color: "#667085", fontSize: 12 },
   aiBox: {
-    marginTop: 4,
-    paddingTop: 12,
-    borderTop: "1px dashed #e0e0e0"
+    marginTop: 6,
+    padding: "14px 14px 4px",
+    border: "1px solid #e5eaf0",
+    borderRadius: 8,
+    background: "#fbfcfe"
   },
-  aiTitle: { fontSize: 13, fontWeight: 700, color: "#444", marginBottom: 10 },
-  step: { marginBottom: 12 },
-  stepLabel: { fontSize: 12, fontWeight: 600, color: "#666", marginBottom: 6 },
+  aiTitle: { fontSize: 13, fontWeight: 800, color: "#344054", marginBottom: 12 },
+  step: {
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottom: "1px solid #edf1f5"
+  },
+  stepLabel: { fontSize: 12, fontWeight: 700, color: "#667085", marginBottom: 7 },
   tokens: { display: "flex", flexWrap: "wrap", gap: 4 },
   token: {
     background: "#f0f4ff",
@@ -358,7 +394,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace"
   },
-  bars: { display: "flex", flexDirection: "column", gap: 6 },
+  bars: { display: "flex", flexDirection: "column", gap: 8 },
   barRow: { display: "flex", alignItems: "center", gap: 8 },
   barLabel: {
     minWidth: 36,
@@ -369,8 +405,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   barTrack: {
     flex: 1,
-    height: 14,
-    background: "#f0f0f0",
+    height: 16,
+    background: "#eef2f6",
     borderRadius: 7,
     overflow: "hidden"
   },
@@ -382,7 +418,13 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
     flexShrink: 0
   },
-  final: { marginTop: 6, paddingTop: 8, borderTop: "1px solid #f0f0f0" }
+  final: {
+    marginTop: 10,
+    padding: "10px 12px",
+    border: "1px solid #edf1f5",
+    borderRadius: 8,
+    background: "#fff"
+  }
 }
 
 export default Report2

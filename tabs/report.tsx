@@ -773,28 +773,30 @@ function EvidenceTable({
   rows: string[][]
 }) {
   return (
-    <table style={styles.table}>
-      <thead>
-        <tr>
-          {cols.map((c) => (
-            <th key={c} style={styles.th}>
-              {c}
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row, i) => (
-          <tr key={i}>
-            {row.map((cell, j) => (
-              <td key={j} style={styles.td}>
-                {cell}
-              </td>
+    <div style={styles.tableWrap}>
+      <table style={styles.table}>
+        <thead>
+          <tr>
+            {cols.map((c) => (
+              <th key={c} style={styles.th}>
+                {c}
+              </th>
             ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr key={i}>
+              {row.map((cell, j) => (
+                <td key={j} style={styles.td}>
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   )
 }
 
@@ -806,23 +808,26 @@ function Shell({ children }: { children: React.ReactNode }) {
 // 인라인 스타일 — 보고서는 글이 많아 가독성 우선(밝은 배경/검은 글씨), 오버레이의 어두운 톤과는 의도적으로 다름
 const styles: Record<string, React.CSSProperties> = {
   page: {
-    maxWidth: 880,
+    maxWidth: 1040,
     margin: "0 auto",
-    padding: "32px 24px",
+    padding: "36px 24px 48px",
     fontFamily:
       '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     color: "#1a1a1a",
     fontSize: 14,
-    lineHeight: 1.6
+    lineHeight: 1.6,
+    background: "#f6f8fb",
+    minHeight: "100vh",
+    boxSizing: "border-box"
   },
   hero: {
-    border: "1px solid #e5e7eb",
+    border: "1px solid #dde3ea",
     borderTop: "6px solid #4b5563",
-    borderRadius: 10,
-    padding: "22px 24px",
+    borderRadius: 12,
+    padding: "24px 26px",
     marginBottom: 24,
     background: "#fff",
-    boxShadow: "0 8px 24px rgba(0,0,0,0.06)"
+    boxShadow: "0 10px 28px rgba(20, 32, 50, 0.08)"
   },
   heroMetaRow: {
     display: "flex",
@@ -836,7 +841,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#fff",
     fontSize: 13,
     fontWeight: 800,
-    padding: "4px 10px",
+    padding: "5px 11px",
     borderRadius: 999
   },
   videoMeta: { color: "#666", fontSize: 13 },
@@ -862,10 +867,10 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 10
   },
   stat: {
-    border: "1px solid #ececec",
+    border: "1px solid #e4e9f0",
     borderRadius: 8,
-    padding: "10px 12px",
-    background: "#fafafa"
+    padding: "11px 12px",
+    background: "#f9fbfd"
   },
   statLabel: { color: "#666", fontSize: 12, marginBottom: 2 },
   statValue: { fontSize: 20, fontWeight: 800 },
@@ -883,11 +888,11 @@ const styles: Record<string, React.CSSProperties> = {
   link: { color: "#1a73e8", textDecoration: "none" },
   card: {
     background: "#fff",
-    border: "1px solid #e3e3e3",
+    border: "1px solid #dde3ea",
     borderRadius: 8,
     padding: 0,
     marginBottom: 14,
-    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+    boxShadow: "0 4px 14px rgba(20, 32, 50, 0.06)",
     overflow: "hidden"
   },
   cardToggle: {
@@ -896,10 +901,10 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#fff",
     color: "inherit",
     display: "grid",
-    gridTemplateColumns: "28px auto 54px minmax(0, 1fr) 76px",
+    gridTemplateColumns: "32px auto 58px minmax(0, 1fr) 78px",
     alignItems: "center",
     gap: 10,
-    padding: "14px 16px",
+    padding: "15px 18px",
     textAlign: "left",
     cursor: "pointer",
     fontFamily: "inherit"
@@ -907,7 +912,8 @@ const styles: Record<string, React.CSSProperties> = {
   cardIndex: {
     color: "#777",
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-    fontSize: 12
+    fontSize: 12,
+    textAlign: "center"
   },
   tag: {
     color: "#fff",
@@ -927,7 +933,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     overflow: "hidden",
     textOverflow: "ellipsis",
-    whiteSpace: "nowrap"
+    whiteSpace: "normal",
+    wordBreak: "break-word",
+    lineHeight: 1.45
   },
   chevron: {
     color: "#1a73e8",
@@ -937,14 +945,14 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cardBody: {
     borderTop: "1px solid #eeeeee",
-    padding: "12px 16px 16px",
-    background: "#fcfcfc"
+    padding: "14px 18px 18px",
+    background: "#fbfcfe"
   },
   originalLinkRow: { margin: "0 0 10px", color: "#555", fontSize: 13 },
   generatedReport: {
     margin: "0 0 10px",
-    padding: "10px 12px",
-    border: "1px solid #dfe7f3",
+    padding: "12px 14px",
+    border: "1px solid #d8e4f2",
     borderRadius: 8,
     background: "#f8fbff",
     color: "#253044",
@@ -980,7 +988,7 @@ const styles: Record<string, React.CSSProperties> = {
   evidence: {
     marginTop: 12,
     paddingTop: 12,
-    borderTop: "1px dashed #e0e0e0"
+    borderTop: "1px solid #e5eaf0"
   },
   evidenceTitle: {
     fontSize: 13,
@@ -988,20 +996,35 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#444",
     marginBottom: 8
   },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: 13 },
+  tableWrap: {
+    width: "100%",
+    overflowX: "auto",
+    border: "1px solid #e5eaf0",
+    borderRadius: 8,
+    background: "#fff"
+  },
+  table: {
+    width: "100%",
+    minWidth: 760,
+    borderCollapse: "separate",
+    borderSpacing: 0,
+    fontSize: 13
+  },
   th: {
     textAlign: "left",
-    padding: "6px 8px",
-    background: "#f5f5f5",
-    borderBottom: "1px solid #e0e0e0",
+    padding: "8px 10px",
+    background: "#f2f5f8",
+    borderBottom: "1px solid #e0e6ee",
     color: "#555",
-    fontWeight: 600
+    fontWeight: 700,
+    whiteSpace: "nowrap"
   },
   td: {
-    padding: "6px 8px",
-    borderBottom: "1px solid #f0f0f0",
+    padding: "8px 10px",
+    borderBottom: "1px solid #edf1f5",
     verticalAlign: "top",
-    whiteSpace: "pre-wrap"
+    whiteSpace: "pre-wrap",
+    color: "#333"
   },
   note: { marginTop: 10, color: "#8a6d00", fontSize: 13 }
 }

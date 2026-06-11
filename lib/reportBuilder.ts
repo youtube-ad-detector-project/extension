@@ -30,16 +30,35 @@ export type AppliedException = {
   explanation: string
 }
 
+export type ModelInspectionResult = {
+  resultLabel: string
+  confidencePercent: number
+  isViolation: boolean
+}
+
+export type ModelInspectionSummary = {
+  inspectedSentenceCount: number
+  violationSentenceCount: number
+  averageConfidencePercent: number | null
+  resultText: string
+  averageConfidenceText: string
+}
+
 export type SentenceReport = {
   sentence: string
   finalStatus: FinalStatus
   userFacingDecision: UserFacingDecision
+  violationTypes: string[]
+  triggerTypes: string[]
   plainConclusion: string
   sentenceRiskPercent: number
   riskExplanation: string
   detectedReasons: DetectedReason[]
+  directLegalBasis: string[]
+  relatedLegalBasisCandidates: string[]
   triggerExplanation: string | null
   modelExplanation: string | null
+  modelInspection: ModelInspectionResult | null
   healthFoodExplanation: string | null
   healthFoodVerificationUrl: string | null
   appliedExceptions: AppliedException[]
@@ -53,15 +72,16 @@ export type FinalReport = {
     summary: string
     caution: string
   }
+  modelInspectionSummary: ModelInspectionSummary
   sentenceReports: SentenceReport[]
   overallCaution: string
 }
 
 // 고정 주의 문구 — 단정 표현 방지 문구를 코드 상수로 고정해 기본 보고서에서 흔들리지 않게 한다.
 const VIDEO_RISK_CAUTION =
-  "이 점수는 실제 위법 확률이 아니라 자동 탐지 기준상의 위험 신호 점수입니다."
+  "이 점수는 실제 위법 확률이 아니라 탐지된 표현과 모델 결과를 바탕으로 한 참고 지표입니다."
 const OVERALL_CAUTION =
-  "이 결과는 자동 탐지 시스템의 위험 신호 안내이며, 법적 판단이나 위법 확정이 아닙니다. 최종 판단은 관계 기관 또는 전문가 검토가 필요합니다."
+  "이 결과는 자동 탐지 기준에 따른 검토 안내입니다. 법적 판단이나 위법 확정은 관계 기관 또는 전문가 검토가 필요합니다."
 
 // 영상 단위 요약 문장 — videoRisk(이미 계산됨)를 사람이 읽을 한 줄로 풀어 쓴다 (점수 재계산 아님)
 function buildVideoSummary(vr: VideoRisk): string {
@@ -69,7 +89,7 @@ function buildVideoSummary(vr: VideoRisk): string {
   if (vr.riskGrade === "표시 없음") {
     return "현재 탐지 기준상 뚜렷한 위법 의심 신호가 감지되지 않았습니다."
   }
-  return `자동 탐지 위험도 ${vr.riskScore}점(${vr.riskGrade}). 의심 문장 ${vr.suspiciousSentenceCount}개, 최고 문장 위험도 ${vr.maxSentenceRiskPercent}점.`
+  return `검토가 필요한 문장 ${vr.suspiciousSentenceCount}개가 확인되었습니다. 가장 높은 문장 위험도는 ${vr.maxSentenceRiskPercent}점입니다.`
 }
 
 // rule/trigger hit 을 근거 항목으로 평탄화 — rule 은 직접 근거(legalBasis), trigger 는 후보(candidate)로 분리
@@ -116,18 +136,78 @@ function buildTriggerExplanation(r: AnalysisResult): string | null {
   const hits = r.triggerAnalysis?.hits ?? []
   if (hits.length === 0) return null
   const names = hits.map((t) => t.categoryName).join(", ")
-  return `트리거 신호(${names})가 감지되어 모델 추가 검증 대상이 되었습니다. 트리거는 최종 판단 근거가 아니라 검토 신호입니다.`
+  return `트리거 신호(${names})가 감지되어 정밀 검사 대상으로 분류되었습니다. 트리거는 확정 근거가 아니라 검토 신호입니다.`
 }
 
 // 모델 결과가 합쳐진 경우(attachModelResult 거침)만 설명, 아니면 null
 function buildModelExplanation(r: AnalysisResult): string | null {
   const m = r.modelResult
   if (!m) return null
-  return `AI 분류 모델은 이 문장을 ${m.predictionLabel}으로 분류했습니다. 이는 법적 판단이 아니라 모델의 자동 예측 결과입니다.`
+  const confidencePercent = Math.round(m.confidence * 100)
+  const verdict = m.prediction === 1 ? "위법 의심" : "추가 의심 낮음"
+  return `정밀 검사 결과 ${verdict}으로 분류되었습니다. 모델 라벨은 ${m.predictionLabel}, 신뢰도는 ${confidencePercent}%입니다.`
 }
 
 function unique(items: string[]): string[] {
   return Array.from(new Set(items.filter(Boolean)))
+}
+
+function buildViolationTypes(r: AnalysisResult): string[] {
+  return unique((r.ruleAnalysis?.hits ?? []).map((h) => h.subCategory))
+}
+
+function buildTriggerTypes(r: AnalysisResult): string[] {
+  return unique((r.triggerAnalysis?.hits ?? []).map((h) => h.categoryName))
+}
+
+function buildModelInspectionResult(
+  r: AnalysisResult
+): ModelInspectionResult | null {
+  const m = r.modelResult
+  if (!m) return null
+
+  return {
+    resultLabel: m.predictionLabel,
+    confidencePercent: Math.round(m.confidence * 100),
+    isViolation: m.prediction === 1
+  }
+}
+
+function buildModelInspectionSummary(
+  merged: ScannedLine[]
+): ModelInspectionSummary {
+  const inspected = merged
+    .map((line) => line.result.modelResult)
+    .filter((m): m is NonNullable<typeof m> => Boolean(m))
+  const inspectedSentenceCount = inspected.length
+
+  if (inspectedSentenceCount === 0) {
+    return {
+      inspectedSentenceCount: 0,
+      violationSentenceCount: 0,
+      averageConfidencePercent: null,
+      resultText: "검사 대상 없음",
+      averageConfidenceText: "계산된 값 없음"
+    }
+  }
+
+  const violationSentenceCount = inspected.filter((m) => m.prediction === 1).length
+  const averageConfidencePercent = Math.round(
+    (inspected.reduce((sum, m) => sum + m.confidence, 0) /
+      inspectedSentenceCount) *
+      100
+  )
+
+  return {
+    inspectedSentenceCount,
+    violationSentenceCount,
+    averageConfidencePercent,
+    resultText:
+      violationSentenceCount > 0
+        ? `위법 의심 ${violationSentenceCount}건`
+        : "추가 의심 낮음",
+    averageConfidenceText: `${averageConfidencePercent}%`
+  }
 }
 
 function quoteEvidence(value: string | null | undefined): string {
@@ -303,14 +383,14 @@ function buildTriggerConclusion(r: AnalysisResult): string | null {
     `${getTriggerPlainRiskText(primaryHit)}, ${legalPhrase}`
 
   if (r.modelResult?.prediction === 0) {
-    return `${prefix}감지되었지만 AI 모델은 비의심으로 분류했습니다. 법적 판단이 아니라 검토 참고 항목입니다.`
+    return `${prefix}감지되었지만 정밀 검사에서는 추가 의심이 낮게 분류되었습니다. 법적 판단이 아니라 검토 참고 항목입니다.`
   }
 
   if (r.modelResult?.prediction === 1) {
-    return `${prefix}감지되었고 AI 모델도 의심으로 분류했습니다. 최종 판단은 관계 기관 또는 전문가 검토가 필요합니다.`
+    return `${prefix}감지되었고 정밀 검사에서도 위법 의심으로 분류되었습니다. 최종 판단은 관계 기관 또는 전문가 검토가 필요합니다.`
   }
 
-  return `${prefix}AI 추가 검증 대상으로 표시됩니다. 트리거는 최종 판단 근거가 아니라 검토 신호입니다.`
+  return `${prefix}정밀 검사 대상으로 표시됩니다. 트리거는 최종 판단 근거가 아니라 검토 신호입니다.`
 }
 
 function buildPlainConclusion(r: AnalysisResult): string {
@@ -338,12 +418,12 @@ function buildUserFacingRiskExplanation(r: AnalysisResult): string {
 
   if (r.finalStatus === "Route-to-Model") {
     if (r.modelResult?.prediction === 1) {
-      return "우회 표현 신호가 감지되었고 AI 모델도 의심으로 분류해 문장 위험도가 표시됩니다."
+      return "우회 표현 신호가 감지되었고 정밀 검사에서도 위법 의심으로 분류되어 문장 위험도가 표시됩니다."
     }
     if (r.modelResult?.prediction === 0) {
-      return "우회 표현 신호는 감지되었지만 AI 모델이 비의심으로 분류해 문장 위험도는 낮게 표시됩니다."
+      return "우회 표현 신호는 감지되었지만 정밀 검사에서 추가 의심이 낮게 분류되어 문장 위험도는 낮게 표시됩니다."
     }
-    return "우회 표현 신호가 감지되어 AI 추가 검토 대상으로 표시됩니다."
+    return "우회 표현 신호가 감지되어 정밀 검사 대상으로 표시됩니다."
   }
 
   return "현재 탐지 기준상 문장 위험도가 낮게 표시됩니다."
@@ -351,16 +431,25 @@ function buildUserFacingRiskExplanation(r: AnalysisResult): string {
 
 // 문장 1개 → 보고서 항목 — 점수/판정/근거/예외를 엔진이 만든 값에서 그대로 옮긴다 (새 판단 안 함)
 function buildSentenceReport(r: AnalysisResult): SentenceReport {
+  const detectedReasons = buildDetectedReasons(r)
+
   return {
     sentence: r.sentence,
     finalStatus: r.finalStatus,
     userFacingDecision: r.userFacingDecision,
+    violationTypes: buildViolationTypes(r),
+    triggerTypes: buildTriggerTypes(r),
     plainConclusion: buildPlainConclusion(r),
     sentenceRiskPercent: r.sentenceRisk.riskPercent,
     riskExplanation: buildUserFacingRiskExplanation(r),
-    detectedReasons: buildDetectedReasons(r),
+    detectedReasons,
+    directLegalBasis: unique(detectedReasons.flatMap((reason) => reason.legalBasis)),
+    relatedLegalBasisCandidates: unique(
+      detectedReasons.flatMap((reason) => reason.relatedLegalBasisCandidates)
+    ),
     triggerExplanation: buildTriggerExplanation(r),
     modelExplanation: buildModelExplanation(r),
+    modelInspection: buildModelInspectionResult(r),
     // 건기식 안내는 엔진이 이미 한국어 문구로 만들어 두었으므로 그대로 사용
     healthFoodExplanation: r.warningMessage,
     healthFoodVerificationUrl: r.verificationUrl,
@@ -386,6 +475,7 @@ export function buildFinalReport(
       summary: buildVideoSummary(videoRisk),
       caution: VIDEO_RISK_CAUTION
     },
+    modelInspectionSummary: buildModelInspectionSummary(merged),
     sentenceReports: merged
       .filter((l) => l.status !== "Rule-Negative")
       .map((l) => buildSentenceReport(l.result)),
