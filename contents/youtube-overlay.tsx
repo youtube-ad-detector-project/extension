@@ -69,12 +69,12 @@ type AiState =
 
 const KEY_PREFIX = "caption:"
 
-// 두 패널이 겹치지 않도록 가로 슬롯을 분리 — 자막 패널은 right:12, 위반 패널은 그 왼쪽
-//   자막 패널 최대 폭(12 + 340)을 넘어선 지점에 둬야 자막이 열려 있어도 위반 토글이 안 가려진다
+// 자막/보고서 패널은 가로 슬롯을 분리하고, 진행 패널은 영상 가림을 줄이기 위해 오른쪽 세로 슬롯에 접어둔다.
+//   진행 패널은 사용자가 열 때만 자세히 보여주고, 기본 상태에서는 색상 있는 작은 토글로 현재 상태를 전달한다.
 const SLOT_SUBTITLE_RIGHT = 12
 const SLOT_VIOLATION_RIGHT = 364
-// 진행 패널은 위반 패널(364~704) 왼쪽 슬롯 — 세 패널이 동시에 열려도 안 겹치게 다음 칸에 둔다
-const SLOT_PROGRESS_RIGHT = 716
+const SLOT_PROGRESS_RIGHT = 12
+const PROGRESS_TOP = 116
 
 // 상태별 짧은 한국어 라벨 — 헤더와 toggle title (hover) 에서 공통 사용
 const STAGE_LABEL: Record<CaptionsPending["stage"], string> = {
@@ -234,7 +234,7 @@ function Overlay() {
         scanned={scanned}
         summary={summary}
       />
-      {/* 위법 패널: 표시는 룰이 아니라 AI 검증(ai) 기준. 사용자 진입점은 최종 보고서 하나만 노출 */}
+      {/* 보고서 패널: 사용자 진입점은 최종 보고서 하나만 노출 */}
       <ViolationPanel
         flagged={flagged}
         ai={ai}
@@ -261,7 +261,7 @@ function statusDot(summary: ScanSummary | null): string {
   return "#1f7a34"
 }
 
-// 최종 보고서 진입 링크 — 클릭 시 background 가 report3.html(점수·법령·모델 결과를 합친 화면) 탭을 연다.
+// 최종 보고서 진입 링크 — 클릭 시 background 가 report3.html(주의 신호·문장별 근거 화면) 탭을 연다.
 //   무엇이 들어가 → 처리 → 무엇이 반환: videoId+summary → 위반·의심이 있을 때 최종 보고서 버튼.
 function FinalReportLink({
   videoId,
@@ -283,7 +283,7 @@ function FinalReportLink({
       onClick={open}
       style={styles.reportLink}
       title="주의 신호와 문장별 근거를 자세히 보기">
-      보고서 자세히 보기
+      보고서 보러가기
     </button>
   )
 }
@@ -338,9 +338,8 @@ function SubtitlePanel({
   )
 }
 
-// ── 위법 패널: 이제 "AI 검증을 통과한" 위법 줄만 보여주는 독립 토글 (자막 패널 왼쪽 슬롯) ──
-//   왜 바뀌었나: 룰 엔진만으로는 위법 UI 를 띄우지 않고, AI(ai)까지 위법으로 확정한 줄만 표시한다.
-//   flagged: 룰이 거른 위반·의심 줄(검증 입력) / ai: 검증 결과 / summary·scanned: 1차(룰) 기준 도구(보고서·JSON)에만 사용
+// ── 보고서 패널: 사용자에게는 개발자용 AI 결과 대신 최종 보고서 진입 카드만 보여준다. ──
+//   flagged: 룰이 거른 위반·의심 줄(검증 입력) / ai: 정밀 확인 상태 / summary: 보고서 진입 가능 여부
 function ViolationPanel({
   flagged,
   ai,
@@ -354,10 +353,10 @@ function ViolationPanel({
 }) {
   // 자막 패널과 별개의 open 상태 — 둘을 동시에 띄울 수 있어야 하므로 독립적으로 관리
   const [open, setOpen] = useState(false)
-  // 토글/헤더 색은 AI 상태 기준 (검증 중=파랑, 위법 있음=빨강, 없음=초록)
-  const dotColor = aiDot(ai)
+  // 토글/헤더 색은 사용자에게 보여줄 후보 기준 (확인 중=파랑, 확인 후보 있음=빨강, 없음=초록)
+  const dotColor = aiDot(ai, flagged)
 
-  // 닫힌 상태: ⚠ 토글 (위치 슬롯만 다르고 색 규칙은 패널 헤더와 동일)
+  // 닫힌 상태: ! 토글 (영상 시청을 방해하지 않는 작은 진입점)
   if (!open) {
     return (
       <button
@@ -367,18 +366,18 @@ function ViolationPanel({
           right: SLOT_VIOLATION_RIGHT,
           background: dotColor
         }}
-        title={aiHeader(ai)}>
-        ⚠
+        title={reportPanelTitle(ai, flagged)}>
+        !
       </button>
     )
   }
 
-  // 열린 상태: 헤더(AI 위법 개수) + AI 가 위법으로 확정한 줄 리스트
+  // 열린 상태: 사용자용 요약 + 보고서 진입 버튼. 문장 목록과 모델 점수는 report3 에서만 보여준다.
   return (
     <div style={{ ...styles.panel, right: SLOT_VIOLATION_RIGHT }}>
       <div style={styles.panelHeader}>
         <span style={{ ...styles.dot, background: dotColor }} />
-        <span style={styles.headerLabel}>{aiHeader(ai)}</span>
+        <span style={styles.headerLabel}>{reportPanelTitle(ai, flagged)}</span>
         <button
           onClick={() => setOpen(false)}
           style={styles.closeBtn}
@@ -386,9 +385,10 @@ function ViolationPanel({
           ×
         </button>
       </div>
-      {/* 사용자에게는 최종 보고서 하나만 노출한다. */}
-      <FinalReportLink videoId={videoId} summary={summary} />
-      <div style={styles.panelBody}>{renderAiBody(ai, flagged)}</div>
+      <div style={styles.panelBody}>
+        {renderReportPrompt(ai, flagged)}
+        <FinalReportLink videoId={videoId} summary={summary} />
+      </div>
     </div>
   )
 }
@@ -407,11 +407,12 @@ function ProgressPanel({
   summary: ScanSummary | null
   ai: AiState
 }) {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   // 세 단계 뷰로 변환 — 각 단계의 status(대기/진행/완료/실패)와 한 줄 설명
   const stages = buildStages(entry, scanned, summary, ai)
   // 닫힌 토글 색: 가장 우선되는 상태(실패>진행>완료>대기)로 전체 진행을 한 점으로 요약
   const dotColor = overallColor(stages)
+  const tooltip = progressTooltip(stages)
 
   // 닫힌 상태: ⚙ 토글 (진행 색을 그대로 입혀 닫아둬도 흐름이 보이게)
   if (!open) {
@@ -420,10 +421,12 @@ function ProgressPanel({
         onClick={() => setOpen(true)}
         style={{
           ...styles.toggleClosed,
+          ...styles.progressToggleClosed,
           right: SLOT_PROGRESS_RIGHT,
           background: dotColor
         }}
-        title="실시간 분석 진행 상황">
+        aria-label={tooltip}
+        title={tooltip}>
         ⚙
       </button>
     )
@@ -431,7 +434,12 @@ function ProgressPanel({
 
   // 열린 상태: 헤더 + 단계 리스트 (단계마다 상태칩 + 이름 + 상세)
   return (
-    <div style={{ ...styles.panel, right: SLOT_PROGRESS_RIGHT }}>
+    <div
+      style={{
+        ...styles.panel,
+        ...styles.progressPanel,
+        right: SLOT_PROGRESS_RIGHT
+      }}>
       <div style={styles.panelHeader}>
         <span style={{ ...styles.dot, background: dotColor }} />
         <span style={styles.headerLabel}>실시간 분석 진행</span>
@@ -465,6 +473,18 @@ function ProgressPanel({
 }
 
 // 한 줄 상태 요약 — 자막 토글 hover tooltip 과 자막 패널 헤더에서 공유
+// 진행 패널을 접어 둔 상태에서도 hover/스크린리더로 현재 병목 단계를 알 수 있게 한다.
+function progressTooltip(stages: Stage[]): string {
+  const current =
+    stages.find((s) => s.status === "error") ??
+    stages.find((s) => s.status === "active") ??
+    [...stages].reverse().find((s) => s.status === "done") ??
+    stages[0]
+
+  if (!current) return "실시간 분석 진행 상황"
+  return `실시간 분석 진행 상황: ${current.name} - ${current.detail}`
+}
+
 function describeState(
   entry: StoredEntry | null,
   summary: ScanSummary | null
@@ -478,81 +498,97 @@ function describeState(
   return `${entry.data.segments.length}라인 추출됨`
 }
 
-// AI 상태 → 위법 토글/헤더 점 색. 검증 중=파랑, 위법 있음=빨강, 위법 없음/건너뜀=초록, 그 외=회색
-function aiDot(ai: AiState): string {
+// AI 상태 → 보고서 토글/헤더 점 색. 검증 중=파랑, 확인 후보 있음=빨강, 없음/건너뜀=초록.
+function aiDot(ai: AiState, flagged: ScannedLine[]): string {
   if (ai.phase === "running") return "#4a90e2"
-  if (ai.phase === "done")
-    return ai.verdicts.some((v) => v.isViolation) ? "#e5484d" : "#1f7a34"
+  if (ai.phase === "done") return flagged.length > 0 ? "#e5484d" : "#1f7a34"
   if (ai.phase === "skip") return "#1f7a34"
+  if (ai.phase === "error") return flagged.length > 0 ? "#e5484d" : "#888"
   return "#888" // idle / error — 헤더 텍스트로 상태를 구분
 }
 
-// AI 상태 → 위법 패널 헤더/툴팁 한 줄 문구
-function aiHeader(ai: AiState): string {
+function cautionCount(ai: AiState): number {
+  return ai.phase === "done"
+    ? ai.verdicts.filter((v) => v.isViolation).length
+    : 0
+}
+
+// 정밀 확인 상태 → 보고서 패널 헤더/툴팁 한 줄 문구
+function reportPanelTitle(ai: AiState, flagged: ScannedLine[]): string {
   switch (ai.phase) {
     case "idle":
-      return "AI 검증 대기 중…"
+      return "광고 표현 확인 중"
     case "skip":
-      return "위반·의심 없음 — AI 검증 불필요"
+      return "크게 걸리는 표현은 적어요"
     case "running":
-      return `AI 검증 중… (${ai.total}문장)`
+      return "광고 표현 확인 중"
     case "done": {
-      // verdicts 중 isViolation 만 세서 "AI 가 확정한 위법" 개수만 강조
-      const pos = ai.verdicts.filter((v) => v.isViolation).length
-      return `AI 위법 확정 ${pos}건`
+      return flagged.length > 0
+        ? "확인해볼 표현이 있어요"
+        : "크게 걸리는 표현은 적어요"
     }
     case "error":
-      return "AI 검증 실패"
+      return "표현 확인을 완료하지 못했어요"
   }
 }
 
-// AI 상태 + flagged → 위법 패널 본문. done 일 때만 위법 줄 리스트, 그 외엔 상태 안내 문구
-//   데이터 형태: flagged(룰이 거른 줄) 와 ai.verdicts 를 같은 인덱스로 zip → isViolation 인 줄만 남김
-function renderAiBody(ai: AiState, flagged: ScannedLine[]) {
+// AI 상태 + flagged → 사용자용 보고서 진입 안내. 개발자용 문장 리스트/모델 점수는 숨긴다.
+function renderReportPrompt(ai: AiState, flagged: ScannedLine[]) {
   if (ai.phase === "idle") {
-    return <p style={styles.muted}>자막 분석 후 AI 검증을 시작합니다.</p>
+    return (
+      <div style={styles.reportPrompt}>
+        <div style={styles.reportPromptTitle}>영상을 살펴보고 있어요</div>
+        <p style={styles.reportPromptText}>
+          광고 표현이 감지되면 문장별 근거 보고서를 열 수 있습니다.
+        </p>
+      </div>
+    )
   }
   if (ai.phase === "running") {
     return (
-      <p style={styles.muted}>
-        룰 엔진이 거른 {ai.total}문장을 AI 모델로 검증 중입니다…
-      </p>
+      <div style={styles.reportPrompt}>
+        <div style={styles.reportPromptTitle}>표현을 확인하는 중이에요</div>
+        <p style={styles.reportPromptText}>
+          한 번 더 살펴보면 좋은 표현인지 확인하고 있습니다.
+        </p>
+      </div>
     )
   }
   if (ai.phase === "skip") {
     return (
-      <p style={styles.muted}>
-        룰 엔진에서 위반·의심 신호가 없어 AI 검증을 건너뜁니다 ✅
-      </p>
+      <div style={styles.reportPrompt}>
+        <div style={styles.reportPromptTitle}>크게 걸리는 표현은 적어요</div>
+        <p style={styles.reportPromptText}>
+          현재 기준에서는 한 번 더 살펴볼 표현이 뚜렷하게 보이지 않습니다.
+        </p>
+      </div>
     )
   }
   if (ai.phase === "error") {
     return (
-      <p style={styles.muted}>
-        AI 검증 실패: <code style={styles.code}>{ai.reason}</code>
-      </p>
+      <div style={styles.reportPrompt}>
+        <div style={styles.reportPromptTitle}>표현 확인을 완료하지 못했어요</div>
+        <p style={styles.reportPromptText}>
+          잠시 후 다시 시도하거나, 자막 추출 상태를 확인해 주세요.
+        </p>
+      </div>
     )
   }
-  // done — flagged 와 verdicts 는 검증 요청 시점의 같은 배열에서 나와 순서가 1:1 이므로 인덱스로 매핑
-  const pairs = flagged
-    .map((line, i) => ({ line, verdict: ai.verdicts[i] }))
-    .filter((p) => p.verdict?.isViolation)
-  if (pairs.length === 0) {
-    return <p style={styles.muted}>AI 검증 결과 위법 문장이 없습니다 ✅</p>
-  }
+
+  const count = flagged.length
+  const title =
+    count > 0
+      ? "확인해볼 표현이 있어요"
+      : "크게 걸리는 표현은 적어요"
+  const text =
+    count > 0
+      ? `이 영상에서 한 번 더 살펴보면 좋은 표현 ${count}개를 찾았습니다.`
+      : "현재 기준에서는 한 번 더 살펴볼 표현이 뚜렷하게 보이지 않습니다."
+
   return (
-    <div>
-      {pairs.map(({ line, verdict }, i) => (
-        <div key={i} style={styles.segmentRow}>
-          <span style={styles.timestamp}>{formatTime(line.start)}</span>
-          <span style={{ ...styles.text, color: "#e5484d" }}>
-            {`[위법] `}
-            {line.text}
-            {/* 어떤 라벨로 몇 점에 걸렸는지 근거를 살짝 곁들임 (AI:라벨 점수) */}
-            <span style={styles.aiTag}>{` · AI:${verdict.label} ${verdict.score.toFixed(2)}`}</span>
-          </span>
-        </div>
-      ))}
+    <div style={styles.reportPrompt}>
+      <div style={styles.reportPromptTitle}>{title}</div>
+      <p style={styles.reportPromptText}>{text}</p>
     </div>
   )
 }
@@ -668,25 +704,25 @@ function ruleStage(
   }
 }
 
-// 3단계: AI 검증 — ai 상태 기계를 그대로 단계 뷰로 옮긴다
+// 3단계: 정밀 확인 — ai 상태 기계를 사용자용 단계 뷰로 옮긴다
 function aiStageView(ai: AiState): Stage {
   switch (ai.phase) {
     case "idle":
-      return { name: "AI 검증", status: "idle", detail: "대기 중" }
+      return { name: "정밀 확인", status: "idle", detail: "대기 중" }
     case "skip":
-      return { name: "AI 검증", status: "done", detail: "검증 대상 없음 (위반·의심 0)" }
+      return { name: "정밀 확인", status: "done", detail: "추가 확인 대상 없음" }
     case "running":
-      return { name: "AI 검증", status: "active", detail: `검증 중… ${ai.total}문장` }
+      return { name: "정밀 확인", status: "active", detail: `확인 중… ${ai.total}문장` }
     case "done": {
       const pos = ai.verdicts.filter((v) => v.isViolation).length
       return {
-        name: "AI 검증",
+        name: "정밀 확인",
         status: "done",
-        detail: `위법 확정 ${pos}건 / ${ai.verdicts.length}`
+        detail: `주의 표현 ${pos}개 / ${ai.verdicts.length}문장`
       }
     }
     case "error":
-      return { name: "AI 검증", status: "error", detail: `실패: ${ai.reason}` }
+      return { name: "정밀 확인", status: "error", detail: `실패: ${ai.reason}` }
   }
 }
 
@@ -701,7 +737,7 @@ function overallColor(stages: Stage[]): string {
 // 인라인 스타일 모음 — Plasmo CSUI 가 shadow DOM 으로 격리하지만 명시적으로 적어둠
 //   position: fixed 로 viewport 우상단에 고정 — body 에 붙어있어 어떤 페이지/모드에서도 보장됨
 //   top: 72px 는 YouTube masthead(상단바) 아래에 떨어지게 한 값
-//   right 는 패널별로 SLOT_* 상수를 인라인 override (자막=12, 위반=364) 해 동시에 떠도 안 겹침
+//   right/top 은 패널별 SLOT_* 상수와 보조 스타일로 override 한다
 const styles: Record<string, React.CSSProperties> = {
   toggleClosed: {
     position: "fixed",
@@ -721,6 +757,14 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily:
       '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
   },
+  progressToggleClosed: {
+    top: PROGRESS_TOP,
+    width: 40,
+    height: 32,
+    borderRadius: 16,
+    fontSize: 14,
+    letterSpacing: 0
+  },
   panel: {
     position: "fixed",
     top: 72,
@@ -739,6 +783,11 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     overflow: "hidden"
+  },
+  progressPanel: {
+    top: PROGRESS_TOP,
+    width: 300,
+    maxHeight: 260
   },
   panelHeader: {
     display: "flex",
@@ -767,24 +816,46 @@ const styles: Record<string, React.CSSProperties> = {
     height: 20
   },
   reportLink: {
-    // 헤더와 본문 사이 가로 막대형 링크 — 패널 폭을 꽉 채워 눈에 띄게
     display: "block",
     width: "100%",
-    textAlign: "left",
-    background: "rgba(229,72,77,0.15)",
-    color: "#ff8a8d",
+    textAlign: "center",
+    background: "#ff4d5e",
+    color: "#fff",
     border: "none",
-    borderBottom: "1px solid rgba(255,255,255,0.1)",
-    padding: "8px 10px",
-    fontSize: 12,
-    fontWeight: 600,
+    borderRadius: 12,
+    padding: "11px 12px",
+    marginTop: 10,
+    fontSize: 13,
+    fontWeight: 800,
     cursor: "pointer",
-    fontFamily: "inherit"
+    fontFamily: "inherit",
+    boxSizing: "border-box",
+    boxShadow: "0 8px 20px rgba(255,77,94,0.22)"
   },
   panelBody: {
     overflowY: "auto",
-    padding: "6px 10px",
+    padding: "12px",
     flex: 1
+  },
+  reportPrompt: {
+    border: "1px solid rgba(255,255,255,0.08)",
+    borderRadius: 14,
+    background: "rgba(255,255,255,0.045)",
+    padding: "13px 13px 12px"
+  },
+  reportPromptTitle: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: 800,
+    lineHeight: 1.35,
+    wordBreak: "keep-all"
+  },
+  reportPromptText: {
+    margin: "7px 0 0",
+    color: "#bfc4cc",
+    fontSize: 12,
+    lineHeight: 1.55,
+    wordBreak: "keep-all"
   },
   segmentRow: {
     display: "flex",
